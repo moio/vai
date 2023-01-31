@@ -4,6 +4,7 @@ go 1.19
 
 require (
 	github.com/mattn/go-sqlite3 v1.14.16
+	github.com/pkg/errors v0.9.1
 	k8s.io/apimachinery v0.26.1
 	k8s.io/client-go v0.26.1
 )
