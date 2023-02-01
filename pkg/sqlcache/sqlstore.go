@@ -12,7 +12,7 @@ import (
 	"reflect"
 )
 
-// IOStore is a Store that works with some backing I/O, thus:
+// IOStore is a cache.Store that works uses some backing I/O, thus:
 // 1) it has a Close() method and 2) List* methods may return errors
 type IOStore interface {
 	cache.Store
