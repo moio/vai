@@ -13,9 +13,9 @@ import (
 	"strings"
 )
 
-// IOStore is a cache.Store that works uses some backing I/O, thus:
+// IOStore is a cache.Store that uses some backing I/O, thus:
 // 1) it has a Close() method
-// 2) List* methods may panic on I/O errors. Safe* (error-returning) variants added
+// 2) List* methods may panic on I/O errors. Safe* (error-returning) variants are added
 type IOStore interface {
 	cache.Store
 	io.Closer
@@ -27,9 +27,9 @@ type IOStore interface {
 	SafeListKeys() ([]string, error)
 }
 
-// IOIndexer is a cache.Indexer that works uses some backing I/O, thus:
+// IOIndexer is a cache.Indexer that uses some backing I/O, thus:
 // 1) it has a Close() method
-// 2) List* methods may panic on I/O errors. Safe* (error-returning) variants added
+// 2) List* methods may panic on I/O errors. Safe* (error-returning) variants are added
 type IOIndexer interface {
 	cache.Indexer
 	io.Closer
@@ -44,7 +44,7 @@ type IOIndexer interface {
 	SafeListIndexFuncValues(indexName string) ([]string, error)
 }
 
-// sqlIndexer is a cache.Store which stores objects in a SQL database
+// sqlIndexer is a cache.Indexer which stores objects in a SQL database
 type sqlIndexer struct {
 	keyfunc cache.KeyFunc
 	typ     reflect.Type
@@ -66,6 +66,7 @@ type sqlIndexer struct {
 	indexers cache.Indexers
 }
 
+// NewSQLIndexer returns a SQLite-backed IOIndexer for the type typ
 func NewSQLIndexer(keyfunc cache.KeyFunc, typ reflect.Type, indexers cache.Indexers) (IOIndexer, error) {
 	db, err := sql.Open("sqlite3", "./sqlstore.sqlite")
 	if err != nil {
