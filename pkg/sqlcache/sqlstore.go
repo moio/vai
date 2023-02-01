@@ -14,7 +14,8 @@ import (
 )
 
 // IOStore is a cache.Store that works uses some backing I/O, thus:
-// 1) it has a Close() method and 2) List* methods may return errors
+// 1) it has a Close() method
+// 2) List* methods may panic on I/O errors. Safe* (error-returning) variants added
 type IOStore interface {
 	cache.Store
 	io.Closer
@@ -30,7 +31,8 @@ type IOStore interface {
 }
 
 // IOIndexer is a cache.Indexer that works uses some backing I/O, thus:
-// 1) it has a Close() method and 2) List* methods may return errors
+// 1) it has a Close() method
+// 2) List* methods may panic on I/O errors. Safe* (error-returning) variants added
 type IOIndexer interface {
 	cache.Indexer
 	io.Closer
