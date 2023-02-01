@@ -4,7 +4,7 @@ Copyright 2023 SUSE LLC
 Adapted from client-go, Copyright 2014 The Kubernetes Authors.
 */
 
-package cache
+package sqlcache
 
 import (
 	"reflect"
@@ -146,7 +146,7 @@ func testStoreIndexMultiFunc(obj interface{}) ([]string, error) {
 }
 
 func TestSQLIndexer(t *testing.T) {
-	store, err := NewSQLIndexer(testStoreKeyFunc, reflect.TypeOf(testStoreObject{}), testStoreIndexers())
+	store, err := NewIndexer(testStoreKeyFunc, reflect.TypeOf(testStoreObject{}), testStoreIndexers())
 	if err != nil {
 		t.Error(err)
 	}

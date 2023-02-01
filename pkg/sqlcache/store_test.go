@@ -4,7 +4,7 @@ Copyright 2023 SUSE LLC
 Adapted from client-go, Copyright 2014 The Kubernetes Authors.
 */
 
-package cache
+package sqlcache
 
 import (
 	"reflect"
@@ -134,7 +134,7 @@ type testStoreObject struct {
 }
 
 func TestSQLStore(t *testing.T) {
-	store, err := NewSQLIndexer(testStoreKeyFunc, reflect.TypeOf(testStoreObject{}), nil)
+	store, err := NewStore(testStoreKeyFunc, reflect.TypeOf(testStoreObject{}))
 	if err != nil {
 		t.Error(err)
 	}

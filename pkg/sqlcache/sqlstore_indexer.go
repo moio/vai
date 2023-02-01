@@ -1,4 +1,4 @@
-package cache
+package sqlcache
 
 import (
 	"fmt"

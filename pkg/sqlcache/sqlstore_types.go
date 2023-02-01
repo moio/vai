@@ -1,4 +1,4 @@
-package cache
+package sqlcache
 
 import (
 	"database/sql"
@@ -100,8 +100,8 @@ func initSchema(db *sql.DB, indexers cache.Indexers) error {
 	return nil
 }
 
-// NewSQLIndexer returns a SQLite-backed IOIndexer for the type typ
-func NewSQLIndexer(keyfunc cache.KeyFunc, typ reflect.Type, indexers cache.Indexers) (IOIndexer, error) {
+// NewIndexer returns an IOIndexer backed by SQLite for the type typ
+func NewIndexer(keyfunc cache.KeyFunc, typ reflect.Type, indexers cache.Indexers) (IOIndexer, error) {
 	db, err := sql.Open("sqlite3", "./sqlstore.sqlite")
 	if err != nil {
 		return nil, err
@@ -196,4 +196,9 @@ func NewSQLIndexer(keyfunc cache.KeyFunc, typ reflect.Type, indexers cache.Index
 		listKeysFromIndexStmt:   listKeysFromIndexStmt,
 		listIndexFuncValuesStmt: listIndexFuncValuesStmt,
 	}, nil
+}
+
+// NewStore returns an IOStore backed by SQLite for the type typ
+func NewStore(keyfunc cache.KeyFunc, typ reflect.Type) (IOStore, error) {
+	return NewIndexer(keyfunc, typ, cache.Indexers{})
 }
