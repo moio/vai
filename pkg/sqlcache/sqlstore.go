@@ -25,9 +25,6 @@ type IOStore interface {
 
 	// SafeListKeys returns a list of all the keys currently associated with non-empty accumulators
 	SafeListKeys() ([]string, error)
-
-	// SafeListIndexFuncValues returns all the indexed values of the given index
-	SafeListIndexFuncValues(indexName string) ([]string, error)
 }
 
 // IOIndexer is a cache.Indexer that works uses some backing I/O, thus:
@@ -42,6 +39,9 @@ type IOIndexer interface {
 
 	// SafeListKeys returns a list of all the keys currently associated with non-empty accumulators
 	SafeListKeys() ([]string, error)
+
+	// SafeListIndexFuncValues returns all the indexed values of the given index
+	SafeListIndexFuncValues(indexName string) ([]string, error)
 }
 
 // sqlIndexer is a cache.Store which stores objects in a SQL database
