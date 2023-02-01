@@ -125,6 +125,9 @@ func NewSQLIndexer(keyfunc cache.KeyFunc, typ reflect.Type, indexers cache.Index
 			    	WHERE name = ? AND value = ?
 			)
 	`)
+	if err != nil {
+		return nil, err
+	}
 
 	listKeysFromIndexStmt, err := db.Prepare(`
 		SELECT key FROM objects
@@ -133,8 +136,14 @@ func NewSQLIndexer(keyfunc cache.KeyFunc, typ reflect.Type, indexers cache.Index
 			    	WHERE name = ? AND value = ?
 			)
 	`)
+	if err != nil {
+		return nil, err
+	}
 
 	listIndexFuncValuesStmt, err := db.Prepare(`SELECT DISTINCT value FROM indices WHERE name = ?`)
+	if err != nil {
+		return nil, err
+	}
 
 	return &sqlIndexer{
 		typ:                     typ,
