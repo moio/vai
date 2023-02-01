@@ -1,5 +1,7 @@
 /*
-Copyright 2012 SUSE LLC
+Copyright 2023 SUSE LLC
+
+Adapted from client-go, Copyright 2014 The Kubernetes Authors.
 */
 
 package cache
@@ -122,51 +124,8 @@ func doTestStore(t *testing.T, store cache.Store) {
 	}
 }
 
-// Test public interface
-func doTestIndex(t *testing.T, indexer cache.Indexer) {
-	mkObj := func(id string, val string) testStoreObject {
-		return testStoreObject{Id: id, Val: val}
-	}
-
-	// Test Index
-	expected := map[string]sets.String{}
-	expected["b"] = sets.NewString("a", "c")
-	expected["f"] = sets.NewString("e")
-	expected["h"] = sets.NewString("g")
-	indexer.Add(mkObj("a", "b"))
-	indexer.Add(mkObj("c", "b"))
-	indexer.Add(mkObj("e", "f"))
-	indexer.Add(mkObj("g", "h"))
-	{
-		for k, v := range expected {
-			found := sets.String{}
-			indexResults, err := indexer.Index("by_val", mkObj("", k))
-			if err != nil {
-				t.Errorf("Unexpected error %v", err)
-			}
-			for _, item := range indexResults {
-				found.Insert(item.(testStoreObject).Id)
-			}
-			items := v.List()
-			if !found.HasAll(items...) {
-				t.Errorf("missing items, index %s, expected %v but found %v", k, items, found.List())
-			}
-		}
-	}
-}
-
 func testStoreKeyFunc(obj interface{}) (string, error) {
 	return obj.(testStoreObject).Id, nil
-}
-
-func testStoreIndexFunc(obj interface{}) ([]string, error) {
-	return []string{obj.(testStoreObject).Val}, nil
-}
-
-func testStoreIndexers() cache.Indexers {
-	indexers := cache.Indexers{}
-	indexers["by_val"] = testStoreIndexFunc
-	return indexers
 }
 
 type testStoreObject struct {
@@ -175,7 +134,7 @@ type testStoreObject struct {
 }
 
 func TestSQLStore(t *testing.T) {
-	store, err := NewSQLStore(testStoreKeyFunc, reflect.TypeOf(testStoreObject{}))
+	store, err := NewSQLIndexer(testStoreKeyFunc, reflect.TypeOf(testStoreObject{}), nil)
 	if err != nil {
 		t.Error(err)
 	}
