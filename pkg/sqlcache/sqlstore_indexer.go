@@ -3,6 +3,7 @@ package cache
 import (
 	"fmt"
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/pkg/errors"
 	"k8s.io/client-go/tools/cache"
 	"strings"
 )
@@ -72,7 +73,7 @@ func (s *sqlIndexer) IndexKeys(indexName, indexedValue string) ([]string, error)
 func (s *sqlIndexer) ListIndexFuncValues(indexName string) []string {
 	result, err := s.SafeListIndexFuncValues(indexName)
 	if err != nil {
-		fmt.Printf("Error in sqlIndexer.List %v", err)
+		panic(errors.Wrap(err, "Unexpected error in sqlIndexer.ListIndexFuncValues"))
 	}
 
 	return result

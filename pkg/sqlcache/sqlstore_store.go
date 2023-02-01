@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"database/sql"
 	"encoding/gob"
-	"fmt"
 	"github.com/pkg/errors"
 	"reflect"
 )
@@ -98,7 +97,7 @@ func (s *sqlIndexer) Delete(obj interface{}) error {
 func (s *sqlIndexer) List() []interface{} {
 	result, err := s.SafeList()
 	if err != nil {
-		fmt.Printf("Error in sqlIndexer.List %v", err)
+		panic(errors.Wrap(err, "Unexpected error in sqlIndexer.List"))
 	}
 
 	return result
@@ -117,7 +116,7 @@ func (s *sqlIndexer) SafeList() ([]interface{}, error) {
 func (s *sqlIndexer) ListKeys() []string {
 	result, err := s.SafeListKeys()
 	if err != nil {
-		fmt.Printf("Error in sqlIndexer.ListKeys %v", err)
+		panic(errors.Wrap(err, "Unexpected error in sqlIndexer.ListKeys"))
 	}
 
 	return result
