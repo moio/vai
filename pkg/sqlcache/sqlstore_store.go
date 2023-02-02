@@ -28,12 +28,12 @@ func (s *sqlIndexer) Add(obj interface{}) error {
 	if err != nil {
 		return err
 	}
-	result, err := tx.Stmt(s.addStmt).Exec(key, buf.Bytes())
+	_, err = tx.Stmt(s.addStmt).Exec(key, buf.Bytes())
 	if err != nil {
 		return err
 	}
 
-	objectId, err := result.LastInsertId()
+	_, err = tx.Stmt(s.deleteIndexStmt).Exec(key)
 	if err != nil {
 		return err
 	}
@@ -45,7 +45,7 @@ func (s *sqlIndexer) Add(obj interface{}) error {
 		}
 
 		for _, value := range values {
-			_, err = tx.Stmt(s.addIndexStmt).Exec(indexName, value, objectId)
+			_, err = tx.Stmt(s.addIndexStmt).Exec(indexName, value, key)
 			if err != nil {
 				return err
 			}

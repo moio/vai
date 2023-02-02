@@ -50,6 +50,7 @@ type sqlIndexer struct {
 
 	addStmt                 *sql.Stmt
 	addIndexStmt            *sql.Stmt
+	deleteIndexStmt         *sql.Stmt
 	getStmt                 *sql.Stmt
 	deleteStmt              *sql.Stmt
 	listStmt                *sql.Stmt
@@ -75,17 +76,15 @@ func initSchema(db *sql.DB, indexers cache.Indexers) error {
 		`DROP TABLE IF EXISTS indices`,
 		`DROP TABLE IF EXISTS objects`,
 		`CREATE TABLE objects (
-			id INTEGER PRIMARY KEY,
-			key VARCHAR UNIQUE NOT NULL,
+			key VARCHAR UNIQUE NOT NULL PRIMARY KEY,
 			object BLOB
         )`,
 		`CREATE TABLE indices (
-			id INTEGER PRIMARY KEY,
 			name VARCHAR NOT NULL,
 			value VARCHAR NOT NULL,
-			object_id INTEGER NOT NULL REFERENCES objects(id) ON DELETE CASCADE
+			key VARCHAR NOT NULL REFERENCES objects(key) ON DELETE CASCADE,
+			PRIMARY KEY (name, value, key)
         )`,
-		"CREATE INDEX key_index ON objects(key)",
 		"CREATE INDEX indices_name_value_index ON indices(name, value)",
 	}
 
@@ -114,12 +113,17 @@ func NewIndexer(keyfunc cache.KeyFunc, typ reflect.Type, indexers cache.Indexers
 	// Using UPSERT for both Add() and Update()
 	// Add() calls will not fail on existing keys and Update() calls new objects will not fail as well
 	// This seems to be a common pattern at least in client-go, specifically cache.ThreadSafeStore
-	addStmt, err := db.Prepare("INSERT INTO objects(key, object) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET object = excluded.object")
+	addStmt, err := db.Prepare("INSERT INTO objects(key, object) VALUES (?, ?) ON CONFLICT DO UPDATE SET object = excluded.object")
 	if err != nil {
 		return nil, err
 	}
 
-	addIndexStmt, err := db.Prepare("INSERT INTO indices(name, value, object_id) VALUES (?, ?, ?)")
+	addIndexStmt, err := db.Prepare("INSERT INTO indices(name, value, key) VALUES (?, ?, ?)")
+	if err != nil {
+		return nil, err
+	}
+
+	deleteIndexStmt, err := db.Prepare("DELETE FROM indices WHERE key = ?")
 	if err != nil {
 		return nil, err
 	}
@@ -151,8 +155,8 @@ func NewIndexer(keyfunc cache.KeyFunc, typ reflect.Type, indexers cache.Indexers
 
 	listObjectsFromIndexStmt, err := db.Prepare(`
 		SELECT object FROM objects
-			WHERE id IN (
-			    SELECT object_id FROM indices
+			WHERE key IN (
+			    SELECT key FROM indices
 			    	WHERE name = ? AND value = ?
 			)
 	`)
@@ -160,13 +164,7 @@ func NewIndexer(keyfunc cache.KeyFunc, typ reflect.Type, indexers cache.Indexers
 		return nil, err
 	}
 
-	listKeysFromIndexStmt, err := db.Prepare(`
-		SELECT key FROM objects
-			WHERE id IN (
-			    SELECT object_id FROM indices
-			    	WHERE name = ? AND value = ?
-			)
-	`)
+	listKeysFromIndexStmt, err := db.Prepare(`SELECT DISTINCT key FROM indices WHERE name = ? AND value = ?`)
 	if err != nil {
 		return nil, err
 	}
@@ -182,6 +180,7 @@ func NewIndexer(keyfunc cache.KeyFunc, typ reflect.Type, indexers cache.Indexers
 		db:                      db,
 		addStmt:                 addStmt,
 		addIndexStmt:            addIndexStmt,
+		deleteIndexStmt:         deleteIndexStmt,
 		getStmt:                 getStmt,
 		deleteStmt:              deleteStmt,
 		listStmt:                listStmt,

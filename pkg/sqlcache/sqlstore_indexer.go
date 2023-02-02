@@ -35,8 +35,8 @@ func (s *sqlIndexer) Index(indexName string, obj interface{}) ([]interface{}, er
 	// HACK: sql.Statement.Query does not allow to pass slices in as of go 1.19 - use an unprepared statement
 	query := fmt.Sprintf(`
 			SELECT object FROM objects
-				WHERE id IN (
-					SELECT object_id FROM indices
+				WHERE key IN (
+					SELECT key FROM indices
 						WHERE name = ? AND value IN (?%s)
 				)
 		`, strings.Repeat(", ?", len(values)-1))

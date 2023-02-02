@@ -124,6 +124,25 @@ func doTestIndex(t *testing.T, indexer cache.Indexer) {
 			}
 		}
 	}
+
+	err := indexer.Add(mkObj("g", "h2"))
+	if err != nil {
+		t.Errorf("Unexpected error %v", err)
+	}
+	keys, err := indexer.IndexKeys("by_val", "h2")
+	if err != nil {
+		t.Errorf("Unexpected error %v", err)
+	}
+	if len(keys) != 1 && keys[0] != "g" {
+		t.Errorf("Unexpected indexed value after Update, got %v instead of [g]", keys)
+	}
+	keys, err = indexer.IndexKeys("by_val", "h")
+	if err != nil {
+		t.Errorf("Unexpected error %v", err)
+	}
+	if len(keys) != 0 {
+		t.Errorf("Unexpected indexed value after Update, got %v instead of []", keys)
+	}
 }
 
 func testStoreIndexFunc(obj interface{}) ([]string, error) {
