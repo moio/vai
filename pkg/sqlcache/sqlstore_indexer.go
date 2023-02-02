@@ -28,7 +28,7 @@ func (s *sqlIndexer) Index(indexName string, obj interface{}) ([]interface{}, er
 
 	// typical case
 	if len(values) == 1 {
-		s.ByIndex(indexName, values[0])
+		return s.ByIndex(indexName, values[0])
 	}
 
 	// atypical case - more than one value to lookup
