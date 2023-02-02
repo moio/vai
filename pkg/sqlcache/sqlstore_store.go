@@ -62,24 +62,7 @@ func (s *sqlIndexer) Add(obj interface{}) error {
 
 // Update updates the given object in the accumulator associated with the given object's key
 func (s *sqlIndexer) Update(obj interface{}) error {
-	key, err := s.keyfunc(obj)
-	if err != nil {
-		return err
-	}
-
-	var buf bytes.Buffer
-	enc := gob.NewEncoder(&buf)
-	err = enc.Encode(obj)
-	if err != nil {
-		return err
-	}
-
-	_, err = s.updateStmt.Exec(buf.Bytes(), key)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return s.Add(obj)
 }
 
 // Delete deletes the given object from the accumulator associated with the given object's key

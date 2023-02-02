@@ -51,7 +51,6 @@ type sqlIndexer struct {
 	addStmt                 *sql.Stmt
 	addIndexStmt            *sql.Stmt
 	getStmt                 *sql.Stmt
-	updateStmt              *sql.Stmt
 	deleteStmt              *sql.Stmt
 	listStmt                *sql.Stmt
 	deleteAllStmt           *sql.Stmt
@@ -112,7 +111,10 @@ func NewIndexer(keyfunc cache.KeyFunc, typ reflect.Type, indexers cache.Indexers
 		return nil, err
 	}
 
-	addStmt, err := db.Prepare("INSERT INTO objects(key, object) VALUES (?, ?)")
+	// Using UPSERT for both Add() and Update()
+	// Add() calls will not fail on existing keys and Update() calls new objects will not fail as well
+	// This seems to be a common pattern at least in client-go, specifically cache.ThreadSafeStore
+	addStmt, err := db.Prepare("INSERT INTO objects(key, object) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET object = excluded.object")
 	if err != nil {
 		return nil, err
 	}
@@ -123,11 +125,6 @@ func NewIndexer(keyfunc cache.KeyFunc, typ reflect.Type, indexers cache.Indexers
 	}
 
 	getStmt, err := db.Prepare("SELECT object FROM objects WHERE key = ?")
-	if err != nil {
-		return nil, err
-	}
-
-	updateStmt, err := db.Prepare("UPDATE objects SET object = ? WHERE key = ?")
 	if err != nil {
 		return nil, err
 	}
@@ -186,7 +183,6 @@ func NewIndexer(keyfunc cache.KeyFunc, typ reflect.Type, indexers cache.Indexers
 		addStmt:                 addStmt,
 		addIndexStmt:            addIndexStmt,
 		getStmt:                 getStmt,
-		updateStmt:              updateStmt,
 		deleteStmt:              deleteStmt,
 		listStmt:                listStmt,
 		deleteAllStmt:           deleteAllStmt,
