@@ -102,7 +102,7 @@ func initSchema(db *sql.DB, indexers cache.Indexers) error {
 
 // NewIndexer returns an IOIndexer backed by SQLite for the type typ
 func NewIndexer(keyfunc cache.KeyFunc, typ reflect.Type, indexers cache.Indexers) (IOIndexer, error) {
-	db, err := sql.Open("sqlite3", "./sqlstore.sqlite")
+	db, err := sql.Open("sqlite3", "./sqlstore.sqlite?mode=rwc&_journal_mode=memory&_synchronous=off&_mutex=no&_foreign_keys=on")
 	if err != nil {
 		return nil, err
 	}
