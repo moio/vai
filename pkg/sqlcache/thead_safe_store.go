@@ -53,7 +53,23 @@ func NewThreadSafeStore(typ reflect.Type, indexers cache.Indexers) (IOThreadSafe
 		return nil, err
 	}
 
-	err = initSchema(db)
+	stmts := []string{
+		`DROP TABLE IF EXISTS indices`,
+		`DROP TABLE IF EXISTS objects`,
+		`CREATE TABLE objects (
+			key VARCHAR UNIQUE NOT NULL PRIMARY KEY,
+			object BLOB
+        )`,
+		`CREATE TABLE indices (
+			name VARCHAR NOT NULL,
+			value VARCHAR NOT NULL,
+			key VARCHAR NOT NULL REFERENCES objects(key) ON DELETE CASCADE,
+			PRIMARY KEY (name, value, key)
+        )`,
+		"CREATE INDEX indices_name_value_index ON indices(name, value)",
+	}
+
+	err = initSchema(db, stmts)
 	if err != nil {
 		return nil, err
 	}
@@ -141,24 +157,7 @@ func NewThreadSafeStore(typ reflect.Type, indexers cache.Indexers) (IOThreadSafe
 }
 
 // initSchema prepares the schema on a fresh SQLite database
-func initSchema(db *sql.DB) error {
-	// schema definition statements
-	stmts := []string{
-		`DROP TABLE IF EXISTS indices`,
-		`DROP TABLE IF EXISTS objects`,
-		`CREATE TABLE objects (
-			key VARCHAR UNIQUE NOT NULL PRIMARY KEY,
-			object BLOB
-        )`,
-		`CREATE TABLE indices (
-			name VARCHAR NOT NULL,
-			value VARCHAR NOT NULL,
-			key VARCHAR NOT NULL REFERENCES objects(key) ON DELETE CASCADE,
-			PRIMARY KEY (name, value, key)
-        )`,
-		"CREATE INDEX indices_name_value_index ON indices(name, value)",
-	}
-
+func initSchema(db *sql.DB, stmts []string) error {
 	for _, stmt := range stmts {
 		_, err := db.Exec(stmt)
 		if err != nil {
