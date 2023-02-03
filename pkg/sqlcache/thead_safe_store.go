@@ -18,7 +18,17 @@ type sqlThreadSafeStore struct {
 
 	db *sql.DB
 
-	stmts map[string]*sql.Stmt
+	addStmt                 *sql.Stmt
+	addIndexStmt            *sql.Stmt
+	deleteIndexStmt         *sql.Stmt
+	getStmt                 *sql.Stmt
+	deleteStmt              *sql.Stmt
+	listStmt                *sql.Stmt
+	deleteAllStmt           *sql.Stmt
+	listKeysStmt            *sql.Stmt
+	listObjectsFromIndex    *sql.Stmt
+	listKeysFromIndexStmt   *sql.Stmt
+	listIndexFuncValuesStmt *sql.Stmt
 
 	indexers cache.Indexers
 }
@@ -41,40 +51,86 @@ func NewThreadSafeStore(typ reflect.Type, indexers cache.Indexers) (IOThreadSafe
 		return nil, err
 	}
 
-	stmts := map[string]*sql.Stmt{}
-	Prepare(db, stmts, `INSERT INTO objects(key, object) VALUES (?, ?) ON CONFLICT DO UPDATE SET object = excluded.object`)
-	Prepare(db, stmts, `INSERT INTO indices(name, value, key) VALUES (?, ?, ?)`)
-	Prepare(db, stmts, `DELETE FROM indices WHERE key = ?`)
-	Prepare(db, stmts, `SELECT object FROM objects WHERE key = ?`)
-	Prepare(db, stmts, `DELETE FROM objects WHERE key = ?`)
-	Prepare(db, stmts, `INSERT INTO objects(key, object) VALUES (?, ?) ON CONFLICT DO UPDATE SET object = excluded.object`)
-	Prepare(db, stmts, `SELECT object FROM objects`)
-	Prepare(db, stmts, `DELETE FROM objects`)
-	Prepare(db, stmts, `SELECT key FROM objects`)
-	Prepare(db, stmts, `
+	// Using UPSERT for both Add() and Update()
+	// Add() calls will not fail on existing keys and Update() calls new objects will not fail as well
+	// This seems to be a common pattern at least in client-go, specifically cache.ThreadSafeStore
+	addStmt, err := db.Prepare("INSERT INTO objects(key, object) VALUES (?, ?) ON CONFLICT DO UPDATE SET object = excluded.object")
+	if err != nil {
+		return nil, err
+	}
+
+	addIndexStmt, err := db.Prepare("INSERT INTO indices(name, value, key) VALUES (?, ?, ?)")
+	if err != nil {
+		return nil, err
+	}
+
+	deleteIndexStmt, err := db.Prepare("DELETE FROM indices WHERE key = ?")
+	if err != nil {
+		return nil, err
+	}
+
+	getStmt, err := db.Prepare("SELECT object FROM objects WHERE key = ?")
+	if err != nil {
+		return nil, err
+	}
+
+	deleteStmt, err := db.Prepare("DELETE FROM objects WHERE key = ?")
+	if err != nil {
+		return nil, err
+	}
+
+	listStmt, err := db.Prepare("SELECT object FROM objects")
+	if err != nil {
+		return nil, err
+	}
+
+	deleteAllStmt, err := db.Prepare("DELETE FROM objects")
+	if err != nil {
+		return nil, err
+	}
+
+	listKeysStmt, err := db.Prepare("SELECT key FROM objects")
+	if err != nil {
+		return nil, err
+	}
+
+	listObjectsFromIndexStmt, err := db.Prepare(`
 		SELECT object FROM objects
 			WHERE key IN (
 			    SELECT key FROM indices
-					WHERE name = ? AND value = ?
+			    	WHERE name = ? AND value = ?
 			)
 	`)
-	Prepare(db, stmts, `SELECT DISTINCT key FROM indices WHERE name = ? AND value = ?`)
-	Prepare(db, stmts, `SELECT DISTINCT value FROM indices WHERE name = ?`)
+	if err != nil {
+		return nil, err
+	}
+
+	listKeysFromIndexStmt, err := db.Prepare(`SELECT DISTINCT key FROM indices WHERE name = ? AND value = ?`)
+	if err != nil {
+		return nil, err
+	}
+
+	listIndexFuncValuesStmt, err := db.Prepare(`SELECT DISTINCT value FROM indices WHERE name = ?`)
+	if err != nil {
+		return nil, err
+	}
 
 	return &sqlThreadSafeStore{
-		typ:      typ,
-		db:       db,
-		indexers: indexers,
-		stmts:    stmts,
+		typ:                     typ,
+		db:                      db,
+		addStmt:                 addStmt,
+		addIndexStmt:            addIndexStmt,
+		deleteIndexStmt:         deleteIndexStmt,
+		getStmt:                 getStmt,
+		deleteStmt:              deleteStmt,
+		listStmt:                listStmt,
+		deleteAllStmt:           deleteAllStmt,
+		listKeysStmt:            listKeysStmt,
+		indexers:                indexers,
+		listObjectsFromIndex:    listObjectsFromIndexStmt,
+		listKeysFromIndexStmt:   listKeysFromIndexStmt,
+		listIndexFuncValuesStmt: listIndexFuncValuesStmt,
 	}, nil
-}
-
-func Prepare(db *sql.DB, stmts map[string]*sql.Stmt, sql string) {
-	stmt, err := db.Prepare(sql)
-	if err != nil {
-		panic(errors.Errorf("Could not prepare statement: %s\n%v", sql, err))
-	}
-	stmts[sql] = stmt
 }
 
 // initSchema prepares the schema on a fresh SQLite database
@@ -134,18 +190,12 @@ func (s *sqlThreadSafeStore) SafeAdd(key string, obj interface{}) error {
 	if err != nil {
 		return err
 	}
-
-	// Using UPSERT for both Add() and Update()
-	// Add() calls will not fail on existing keys and Update() calls new objects will not fail as well
-	// This seems to be a common pattern at least in client-go, specifically cache.ThreadSafeStore
-	stmt := s.stmts[`INSERT INTO objects(key, object) VALUES (?, ?) ON CONFLICT DO UPDATE SET object = excluded.object`]
-	_, err = tx.Stmt(stmt).Exec(key, buf.Bytes())
+	_, err = tx.Stmt(s.addStmt).Exec(key, buf.Bytes())
 	if err != nil {
 		return err
 	}
 
-	stmt = s.stmts[`DELETE FROM indices WHERE key = ?`]
-	_, err = tx.Stmt(stmt).Exec(key)
+	_, err = tx.Stmt(s.deleteIndexStmt).Exec(key)
 	if err != nil {
 		return err
 	}
@@ -157,8 +207,7 @@ func (s *sqlThreadSafeStore) SafeAdd(key string, obj interface{}) error {
 		}
 
 		for _, value := range values {
-			stmt = s.stmts[`INSERT INTO indices(name, value, key) VALUES (?, ?, ?)`]
-			_, err = tx.Stmt(stmt).Exec(indexName, value, key)
+			_, err = tx.Stmt(s.addIndexStmt).Exec(indexName, value, key)
 			if err != nil {
 				return err
 			}
@@ -193,8 +242,7 @@ func (s *sqlThreadSafeStore) Delete(key string) {
 
 // SafeDelete deletes the object associated with key, if it exists in this store
 func (s *sqlThreadSafeStore) SafeDelete(key string) error {
-	stmt := s.stmts[`DELETE FROM objects WHERE key = ?`]
-	_, err := stmt.Exec(key)
+	_, err := s.deleteStmt.Exec(key)
 	return err
 }
 
@@ -209,8 +257,7 @@ func (s *sqlThreadSafeStore) Get(key string) (item interface{}, exists bool) {
 
 // SafeGet returns the object associated with the given object's key
 func (s *sqlThreadSafeStore) SafeGet(key string) (item interface{}, exists bool, err error) {
-	stmt := s.stmts[`SELECT object FROM objects WHERE key = ?`]
-	result, err := s.queryObjects(stmt, key)
+	result, err := s.queryObjects(s.getStmt, key)
 	if err != nil {
 		return nil, false, err
 	}
@@ -233,8 +280,7 @@ func (s *sqlThreadSafeStore) List() []interface{} {
 
 // SafeList returns a list of all the currently known objects
 func (s *sqlThreadSafeStore) SafeList() ([]interface{}, error) {
-	stmt := s.stmts[`SELECT object FROM objects`]
-	return s.queryObjects(stmt)
+	return s.queryObjects(s.listStmt)
 }
 
 // ListKeys wraps SafeListKeys and panics in case of I/O errors
@@ -248,8 +294,7 @@ func (s *sqlThreadSafeStore) ListKeys() []string {
 
 // SafeListKeys returns a list of all the keys currently in this store
 func (s *sqlThreadSafeStore) SafeListKeys() ([]string, error) {
-	stmt := s.stmts[`SELECT key FROM objects`]
-	return s.queryStrings(stmt)
+	return s.queryStrings(s.listKeysStmt)
 }
 
 // Replace wraps SafeReplace and panics in case of I/O errors
@@ -262,8 +307,7 @@ func (s *sqlThreadSafeStore) Replace(objects map[string]interface{}, dc string) 
 
 // SafeReplace will delete the contents of the store, using instead the given list
 func (s *sqlThreadSafeStore) SafeReplace(objects map[string]interface{}, _ string) error {
-	stmt := s.stmts[`DELETE FROM objects`]
-	_, err := stmt.Exec()
+	_, err := s.deleteAllStmt.Exec()
 	if err != nil {
 		return err
 	}
@@ -329,8 +373,7 @@ func (s *sqlThreadSafeStore) IndexKeys(indexName, indexedValue string) ([]string
 		return nil, fmt.Errorf("Index with name %s does not exist", indexName)
 	}
 
-	stmt := s.stmts[`SELECT DISTINCT key FROM indices WHERE name = ? AND value = ?`]
-	return s.queryStrings(stmt, indexName, indexedValue)
+	return s.queryStrings(s.listKeysFromIndexStmt, indexName, indexedValue)
 }
 
 // ListIndexFuncValues wraps SafeListIndexFuncValues and panics in case of I/O errors
@@ -344,21 +387,13 @@ func (s *sqlThreadSafeStore) ListIndexFuncValues(name string) []string {
 
 // SafeListIndexFuncValues returns all the indexed values of the given index
 func (s *sqlThreadSafeStore) SafeListIndexFuncValues(indexName string) ([]string, error) {
-	stmt := s.stmts[`SELECT DISTINCT value FROM indices WHERE name = ?`]
-	return s.queryStrings(stmt, indexName)
+	return s.queryStrings(s.listIndexFuncValuesStmt, indexName)
 }
 
 // ByIndex returns the stored objects whose set of indexed values
 // for the named index includes the given indexed value
 func (s *sqlThreadSafeStore) ByIndex(indexName, indexedValue string) ([]interface{}, error) {
-	stmt := s.stmts[`
-		SELECT object FROM objects
-			WHERE key IN (
-			    SELECT key FROM indices
-					WHERE name = ? AND value = ?
-			)
-	`]
-	return s.queryObjects(stmt, indexName, indexedValue)
+	return s.queryObjects(s.listObjectsFromIndex, indexName, indexedValue)
 }
 
 // GetIndexers return the indexers
