@@ -176,18 +176,11 @@ func (s *sqlThreadSafeStore) Add(key string, obj interface{}) {
 
 // SafeAdd saves an obj with its key, or updates key with obj if it exists in this store
 func (s *sqlThreadSafeStore) SafeAdd(key string, obj interface{}) error {
-	var buf bytes.Buffer
-	enc := gob.NewEncoder(&buf)
-	err := enc.Encode(obj)
-	if err != nil {
-		return err
-	}
-
 	tx, err := s.db.Begin()
 	if err != nil {
 		return err
 	}
-	_, err = tx.Stmt(s.addStmt).Exec(key, buf.Bytes())
+	_, err = tx.Stmt(s.addStmt).Exec(key, toBytes(obj))
 	if err != nil {
 		return err
 	}
@@ -415,6 +408,18 @@ func (s *sqlThreadSafeStore) Resync() error {
 // Close closes the database and prevents new queries from starting
 func (s *sqlThreadSafeStore) Close() error {
 	return s.db.Close()
+}
+
+// toBytes encodes an object to a byte slice
+func toBytes(obj interface{}) []byte {
+	var buf bytes.Buffer
+	enc := gob.NewEncoder(&buf)
+	err := enc.Encode(obj)
+	if err != nil {
+		panic(errors.Wrap(err, "Error while gobbing object"))
+	}
+	bb := buf.Bytes()
+	return bb
 }
 
 // queryObjects runs a prepared statement that returns gobbed objects of type typ
