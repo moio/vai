@@ -44,18 +44,7 @@ func NewThreadSafeStore(typ reflect.Type, indexers cache.Indexers) (IOThreadSafe
 		}
 	}
 
-	err := os.RemoveAll(DB_LOCATION)
-	if err != nil {
-		return nil, err
-	}
-	db, err := sql.Open("sqlite3", DB_LOCATION+"?mode=rwc&_journal_mode=memory&_synchronous=off&_mutex=no&_foreign_keys=on")
-	if err != nil {
-		return nil, err
-	}
-
 	stmts := []string{
-		`DROP TABLE IF EXISTS indices`,
-		`DROP TABLE IF EXISTS objects`,
 		`CREATE TABLE objects (
 			key VARCHAR UNIQUE NOT NULL PRIMARY KEY,
 			object BLOB
@@ -69,7 +58,7 @@ func NewThreadSafeStore(typ reflect.Type, indexers cache.Indexers) (IOThreadSafe
 		"CREATE INDEX indices_name_value_index ON indices(name, value)",
 	}
 
-	err = initSchema(db, stmts)
+	db, err := initTempSQLiteDB(stmts)
 	if err != nil {
 		return nil, err
 	}
@@ -156,16 +145,25 @@ func NewThreadSafeStore(typ reflect.Type, indexers cache.Indexers) (IOThreadSafe
 	}, nil
 }
 
-// initSchema prepares the schema on a fresh SQLite database
-func initSchema(db *sql.DB, stmts []string) error {
+// initTempSQLiteDB creates a nonpersistent SQLite database and runs init statements on it
+func initTempSQLiteDB(stmts []string) (*sql.DB, error) {
+	err := os.RemoveAll(DB_LOCATION)
+	if err != nil {
+		return nil, err
+	}
+	db, err := sql.Open("sqlite3", DB_LOCATION+"?mode=rwc&_journal_mode=memory&_synchronous=off&_mutex=no&_foreign_keys=on")
+	if err != nil {
+		return nil, err
+	}
+
 	for _, stmt := range stmts {
 		_, err := db.Exec(stmt)
 		if err != nil {
-			return errors.Wrap(err, "Error initializing DB")
+			return nil, errors.Wrap(err, "Error initializing DB")
 		}
 	}
 
-	return nil
+	return db, nil
 }
 
 // Add wraps SafeAdd and panics in case of I/O errors
