@@ -6,13 +6,46 @@ import (
 	"encoding/gob"
 	"fmt"
 	"github.com/pkg/errors"
+	"io"
 	"k8s.io/client-go/tools/cache"
 	"os"
 	"reflect"
 	"strings"
 )
 
-// sqlThreadSafeStore is a cache.ThreadSafeStore which stores objects in a SQL database
+// IOThreadSafeStore is a cache.ThreadSafeStore that uses some backing I/O, thus:
+// 1) it has a Close() method
+// 2) data methods may panic on I/O errors. Safe* (error-returning) variants are added
+type IOThreadSafeStore interface {
+	cache.ThreadSafeStore
+	io.Closer
+
+	// SafeAdd saves an obj with its key, or updates key with obj if it exists in this store
+	SafeAdd(key string, obj interface{}) error
+
+	// SafeUpdate saves an obj with its key, or updates key with obj if it exists in this store
+	SafeUpdate(key string, obj interface{}) error
+
+	// SafeDelete deletes the object associated with key, if it exists in this store
+	SafeDelete(key string) error
+
+	// SafeGet returns the object associated with the given object's key
+	SafeGet(key string) (item interface{}, exists bool, err error)
+
+	// SafeReplace will delete the contents of the store, using instead the given list
+	SafeReplace(map[string]interface{}, string) error
+
+	// SafeList returns a list of all the currently known objects
+	SafeList() ([]interface{}, error)
+
+	// SafeListKeys returns a list of all the keys currently in this store
+	SafeListKeys() ([]string, error)
+
+	// SafeListIndexFuncValues returns all the indexed values of the given index
+	SafeListIndexFuncValues(indexName string) ([]string, error)
+}
+
+// sqlThreadSafeStore is an IOThreadSafeStore which stores objects in a SQL database
 type sqlThreadSafeStore struct {
 	typ reflect.Type
 

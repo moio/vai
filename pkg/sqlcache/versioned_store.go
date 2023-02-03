@@ -4,12 +4,26 @@ import (
 	"database/sql"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/pkg/errors"
+	"io"
 	"k8s.io/client-go/tools/cache"
 	"reflect"
 )
 
-type VersionFunc func(obj interface{}) (int, error)
+// IOStore is a cache.Store that uses some backing I/O, thus:
+// 1) it has a Close() method
+// 2) List* methods may panic on I/O errors. Safe* (error-returning) variants are added
+type IOStore interface {
+	cache.Store
+	io.Closer
 
+	// SafeList returns a list of all the currently known objects
+	SafeList() ([]interface{}, error)
+
+	// SafeListKeys returns a list of all the keys currently in this store
+	SafeListKeys() ([]string, error)
+}
+
+// VersionedStore is an SQLite-backed IOStore
 type VersionedStore struct {
 	typ         reflect.Type
 	db          *sql.DB
@@ -23,6 +37,9 @@ type VersionedStore struct {
 	getStmt     *sql.Stmt
 	delAllStmt  *sql.Stmt
 }
+
+// VersionFunc extracts a version from an object
+type VersionFunc func(obj interface{}) (int, error)
 
 // NewVersionedStore creates a SQLite-backed cache.Store for the type typ
 func NewVersionedStore(typ reflect.Type, keyFunc cache.KeyFunc, versionFunc VersionFunc) (*VersionedStore, error) {

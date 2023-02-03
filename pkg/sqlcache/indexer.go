@@ -2,11 +2,29 @@ package sqlcache
 
 import (
 	_ "github.com/mattn/go-sqlite3"
+	"io"
 	"k8s.io/client-go/tools/cache"
 	"reflect"
 )
 
-// sqlIndexer is a cache.Store and cache.Indexer which stores objects in a SQL database
+// IOIndexer is a cache.Indexer that uses some backing I/O, thus:
+// 1) it has a Close() method
+// 2) data methods may panic on I/O errors. Safe* (error-returning) variants are added
+type IOIndexer interface {
+	cache.Indexer
+	io.Closer
+
+	// SafeList returns a list of all the currently known objects
+	SafeList() ([]interface{}, error)
+
+	// SafeListKeys returns a list of all the keys currently in this store
+	SafeListKeys() ([]string, error)
+
+	// SafeListIndexFuncValues returns all the indexed values of the given index
+	SafeListIndexFuncValues(indexName string) ([]string, error)
+}
+
+// sqlIndexer is an IOIndexer which stores objects in a SQL database
 // delegates the heavy lifting to a cache.ThreadSafeStore
 type sqlIndexer struct {
 	keyfunc         cache.KeyFunc
