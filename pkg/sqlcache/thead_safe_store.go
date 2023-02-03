@@ -257,23 +257,16 @@ func (s *sqlThreadSafeStore) Get(key string) (item interface{}, exists bool) {
 
 // SafeGet returns the object associated with the given object's key
 func (s *sqlThreadSafeStore) SafeGet(key string) (item interface{}, exists bool, err error) {
-	var buf []byte
-	err = s.getStmt.QueryRow(key).Scan(&buf)
-	if errors.Is(err, sql.ErrNoRows) {
+	result, err := s.queryObjects(s.getStmt, key)
+	if err != nil {
+		return nil, false, err
+	}
+
+	if len(result) == 0 {
 		return nil, false, nil
 	}
-	if err != nil {
-		return nil, false, err
-	}
 
-	dec := gob.NewDecoder(bytes.NewReader(buf))
-	result := reflect.New(s.typ)
-	err = dec.DecodeValue(result)
-	if err != nil {
-		return nil, false, err
-	}
-
-	return result.Elem().Interface(), true, nil
+	return result[0], true, nil
 }
 
 // List wraps SafeList and panics in case of I/O errors
