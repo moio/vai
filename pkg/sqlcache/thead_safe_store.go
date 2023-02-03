@@ -287,11 +287,7 @@ func (s *sqlThreadSafeStore) List() []interface{} {
 
 // SafeList returns a list of all the currently known objects
 func (s *sqlThreadSafeStore) SafeList() ([]interface{}, error) {
-	rows, err := s.listStmt.Query()
-	if err != nil {
-		return nil, err
-	}
-	return s.processObjectRows(rows)
+	return s.queryObjects(s.listStmt)
 }
 
 // ListKeys wraps SafeListKeys and panics in case of I/O errors
@@ -355,7 +351,7 @@ func (s *sqlThreadSafeStore) Index(indexName string, obj interface{}) ([]interfa
 	}
 
 	// atypical case - more than one value to lookup
-	// HACK: sql.Statement.Query does not allow to pass slices in as of go 1.19 - use an unprepared statement
+	// HACK: sql.Statement.Query does not allow to pass slices in as of go 1.19 - create an ad-hoc statement
 	query := fmt.Sprintf(`
 			SELECT object FROM objects
 				WHERE key IN (
@@ -363,6 +359,10 @@ func (s *sqlThreadSafeStore) Index(indexName string, obj interface{}) ([]interfa
 						WHERE name = ? AND value IN (?%s)
 				)
 		`, strings.Repeat(", ?", len(values)-1))
+	stmt, err := s.db.Prepare(query)
+	if err != nil {
+		return nil, err
+	}
 
 	// HACK: Query will accept []any but not []string
 	params := []any{indexName}
@@ -370,11 +370,7 @@ func (s *sqlThreadSafeStore) Index(indexName string, obj interface{}) ([]interfa
 		params = append(params, value)
 	}
 
-	rows, err := s.db.Query(query, params...)
-	if err != nil {
-		return nil, err
-	}
-	return s.processObjectRows(rows)
+	return s.queryObjects(stmt, params...)
 }
 
 // IndexKeys returns a list of the Store keys of the objects whose indexed values in the given index include the given indexed value
@@ -404,11 +400,7 @@ func (s *sqlThreadSafeStore) SafeListIndexFuncValues(indexName string) ([]string
 // ByIndex returns the stored objects whose set of indexed values
 // for the named index includes the given indexed value
 func (s *sqlThreadSafeStore) ByIndex(indexName, indexedValue string) ([]interface{}, error) {
-	rows, err := s.listObjectsFromIndex.Query(indexName, indexedValue)
-	if err != nil {
-		return nil, err
-	}
-	return s.processObjectRows(rows)
+	return s.queryObjects(s.listObjectsFromIndex, indexName, indexedValue)
 }
 
 // GetIndexers return the indexers
@@ -435,9 +427,14 @@ func (s *sqlThreadSafeStore) Close() error {
 	return s.db.Close()
 }
 
-// processObjectRows expects a sql.Rows pointer with one column which is byte slice containing a
+// queryObjects expects a sql.Rows pointer with one column which is byte slice containing a
 // gobbed object, and returns a slice of objects
-func (s *sqlThreadSafeStore) processObjectRows(rows *sql.Rows) ([]interface{}, error) {
+func (s *sqlThreadSafeStore) queryObjects(stmt *sql.Stmt, params ...any) ([]interface{}, error) {
+	rows, err := stmt.Query(params...)
+	if err != nil {
+		return nil, err
+	}
+
 	var result []any
 	for rows.Next() {
 		var buf sql.RawBytes
@@ -454,7 +451,7 @@ func (s *sqlThreadSafeStore) processObjectRows(rows *sql.Rows) ([]interface{}, e
 		}
 		result = append(result, singleResult.Elem().Interface())
 	}
-	err := rows.Err()
+	err = rows.Err()
 	if err != nil {
 		if err != nil {
 			return closeOnError(rows, err)
