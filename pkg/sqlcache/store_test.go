@@ -144,3 +144,17 @@ func TestSQLStore(t *testing.T) {
 		return
 	}
 }
+
+func TestNewVersionedStore(t *testing.T) {
+	store, err := NewVersionedStore(reflect.TypeOf(testStoreObject{}), testStoreKeyFunc, func(obj interface{}) (int, error) {
+		return 1, nil
+	})
+	if err != nil {
+		t.Error(err)
+	}
+	doTestStore(t, store)
+	err = store.Close()
+	if err != nil {
+		return
+	}
+}
