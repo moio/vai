@@ -26,7 +26,7 @@ type sqlThreadSafeStore struct {
 const DB_LOCATION = "./sqlstore.sqlite"
 
 // NewThreadSafeStore returns a cache.ThreadSafeStore backed by SQLite for the type typ
-func NewThreadSafeStore(typ reflect.Type, indexers cache.Indexers) (IOThreadSafeStore, error) {
+func NewThreadSafeStore(typ reflect.Type, indexers cache.Indexers, queries []string) (IOThreadSafeStore, error) {
 	err := os.RemoveAll(DB_LOCATION)
 	if err != nil {
 		return nil, err
@@ -42,24 +42,28 @@ func NewThreadSafeStore(typ reflect.Type, indexers cache.Indexers) (IOThreadSafe
 	}
 
 	stmts := map[string]*sql.Stmt{}
-	Prepare(db, stmts, `INSERT INTO objects(key, object) VALUES (?, ?) ON CONFLICT DO UPDATE SET object = excluded.object`)
-	Prepare(db, stmts, `INSERT INTO indices(name, value, key) VALUES (?, ?, ?)`)
-	Prepare(db, stmts, `DELETE FROM indices WHERE key = ?`)
-	Prepare(db, stmts, `SELECT object FROM objects WHERE key = ?`)
-	Prepare(db, stmts, `DELETE FROM objects WHERE key = ?`)
-	Prepare(db, stmts, `INSERT INTO objects(key, object) VALUES (?, ?) ON CONFLICT DO UPDATE SET object = excluded.object`)
-	Prepare(db, stmts, `SELECT object FROM objects`)
-	Prepare(db, stmts, `DELETE FROM objects`)
-	Prepare(db, stmts, `SELECT key FROM objects`)
-	Prepare(db, stmts, `
+	prepare(db, stmts, `INSERT INTO objects(key, object) VALUES (?, ?) ON CONFLICT DO UPDATE SET object = excluded.object`)
+	prepare(db, stmts, `SELECT key FROM objects`)
+	prepare(db, stmts, `SELECT object FROM objects`)
+	prepare(db, stmts, `SELECT object FROM objects WHERE key = ?`)
+	prepare(db, stmts, `
 		SELECT object FROM objects
 			WHERE key IN (
 			    SELECT key FROM indices
 					WHERE name = ? AND value = ?
 			)
 	`)
-	Prepare(db, stmts, `SELECT DISTINCT key FROM indices WHERE name = ? AND value = ?`)
-	Prepare(db, stmts, `SELECT DISTINCT value FROM indices WHERE name = ?`)
+	prepare(db, stmts, `DELETE FROM objects WHERE key = ?`)
+	prepare(db, stmts, `DELETE FROM objects`)
+
+	prepare(db, stmts, `INSERT INTO indices(name, value, key) VALUES (?, ?, ?)`)
+	prepare(db, stmts, `SELECT DISTINCT key FROM indices WHERE name = ? AND value = ?`)
+	prepare(db, stmts, `SELECT DISTINCT value FROM indices WHERE name = ?`)
+	prepare(db, stmts, `DELETE FROM indices WHERE key = ?`)
+
+	for _, query := range queries {
+		prepare(db, stmts, query)
+	}
 
 	return &sqlThreadSafeStore{
 		typ:      typ,
@@ -69,7 +73,8 @@ func NewThreadSafeStore(typ reflect.Type, indexers cache.Indexers) (IOThreadSafe
 	}, nil
 }
 
-func Prepare(db *sql.DB, stmts map[string]*sql.Stmt, sql string) {
+// prepare prepares a statement and puts in in the stmts map
+func prepare(db *sql.DB, stmts map[string]*sql.Stmt, sql string) {
 	stmt, err := db.Prepare(sql)
 	if err != nil {
 		panic(errors.Errorf("Could not prepare statement: %s\n%v", sql, err))
@@ -209,8 +214,7 @@ func (s *sqlThreadSafeStore) Get(key string) (item interface{}, exists bool) {
 
 // SafeGet returns the object associated with the given object's key
 func (s *sqlThreadSafeStore) SafeGet(key string) (item interface{}, exists bool, err error) {
-	stmt := s.stmts[`SELECT object FROM objects WHERE key = ?`]
-	result, err := s.queryObjects(stmt, key)
+	result, err := s.QueryObjects(`SELECT object FROM objects WHERE key = ?`, key)
 	if err != nil {
 		return nil, false, err
 	}
@@ -233,8 +237,7 @@ func (s *sqlThreadSafeStore) List() []interface{} {
 
 // SafeList returns a list of all the currently known objects
 func (s *sqlThreadSafeStore) SafeList() ([]interface{}, error) {
-	stmt := s.stmts[`SELECT object FROM objects`]
-	return s.queryObjects(stmt)
+	return s.QueryObjects(`SELECT object FROM objects`)
 }
 
 // ListKeys wraps SafeListKeys and panics in case of I/O errors
@@ -248,8 +251,7 @@ func (s *sqlThreadSafeStore) ListKeys() []string {
 
 // SafeListKeys returns a list of all the keys currently in this store
 func (s *sqlThreadSafeStore) SafeListKeys() ([]string, error) {
-	stmt := s.stmts[`SELECT key FROM objects`]
-	return s.queryStrings(stmt)
+	return s.QueryStrings(`SELECT key FROM objects`)
 }
 
 // Replace wraps SafeReplace and panics in case of I/O errors
@@ -329,8 +331,7 @@ func (s *sqlThreadSafeStore) IndexKeys(indexName, indexedValue string) ([]string
 		return nil, fmt.Errorf("Index with name %s does not exist", indexName)
 	}
 
-	stmt := s.stmts[`SELECT DISTINCT key FROM indices WHERE name = ? AND value = ?`]
-	return s.queryStrings(stmt, indexName, indexedValue)
+	return s.QueryStrings(`SELECT DISTINCT key FROM indices WHERE name = ? AND value = ?`, indexName, indexedValue)
 }
 
 // ListIndexFuncValues wraps SafeListIndexFuncValues and panics in case of I/O errors
@@ -344,21 +345,19 @@ func (s *sqlThreadSafeStore) ListIndexFuncValues(name string) []string {
 
 // SafeListIndexFuncValues returns all the indexed values of the given index
 func (s *sqlThreadSafeStore) SafeListIndexFuncValues(indexName string) ([]string, error) {
-	stmt := s.stmts[`SELECT DISTINCT value FROM indices WHERE name = ?`]
-	return s.queryStrings(stmt, indexName)
+	return s.QueryStrings(`SELECT DISTINCT value FROM indices WHERE name = ?`, indexName)
 }
 
 // ByIndex returns the stored objects whose set of indexed values
 // for the named index includes the given indexed value
 func (s *sqlThreadSafeStore) ByIndex(indexName, indexedValue string) ([]interface{}, error) {
-	stmt := s.stmts[`
+	return s.QueryObjects(`
 		SELECT object FROM objects
 			WHERE key IN (
 			    SELECT key FROM indices
 					WHERE name = ? AND value = ?
 			)
-	`]
-	return s.queryObjects(stmt, indexName, indexedValue)
+	`, indexName, indexedValue)
 }
 
 // GetIndexers return the indexers
@@ -385,8 +384,16 @@ func (s *sqlThreadSafeStore) Close() error {
 	return s.db.Close()
 }
 
-// queryObjects expects a sql.Rows pointer with one column which is byte slice containing a
-// gobbed object, and returns a slice of objects
+// QueryObjects runs a query that was previously prepared (see NewThreadSafeStore)
+func (s *sqlThreadSafeStore) QueryObjects(sql string, params ...any) ([]interface{}, error) {
+	stmt, ok := s.stmts[sql]
+	if !ok {
+		panic(errors.Errorf("Attempted to execute unprepared query: %s", sql))
+	}
+	return s.queryObjects(stmt, params...)
+}
+
+// queryObjects runs a prepared statement returning a list of objects
 func (s *sqlThreadSafeStore) queryObjects(stmt *sql.Stmt, params ...any) ([]interface{}, error) {
 	rows, err := stmt.Query(params...)
 	if err != nil {
@@ -435,8 +442,16 @@ func closeOnError(rows *sql.Rows, err error) ([]interface{}, error) {
 	return nil, err
 }
 
-// queryStrings expects a sql.Rows pointer with one column which is a string,
-// and returns a slice of strings
+// QueryStrings runs a query that was previously prepared (see NewThreadSafeStore)
+func (s *sqlThreadSafeStore) QueryStrings(sql string, params ...any) ([]string, error) {
+	stmt, ok := s.stmts[sql]
+	if !ok {
+		panic(errors.Errorf("Attempted to execute unprepared query: %s", sql))
+	}
+	return s.queryStrings(stmt, params...)
+}
+
+// queryObjects runs a prepared statement returning a list of strings
 func (s *sqlThreadSafeStore) queryStrings(stmt *sql.Stmt, params ...any) ([]string, error) {
 	rows, err := stmt.Query(params...)
 	if err != nil {

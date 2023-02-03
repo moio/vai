@@ -28,7 +28,7 @@ func TestThreadSafeStoreDeleteRemovesEmptySetsFromIndex(t *testing.T) {
 		},
 	}
 
-	store, err := NewThreadSafeStore(reflect.TypeOf(""), indexers)
+	store, err := NewThreadSafeStore(reflect.TypeOf(""), indexers, nil)
 	if err != nil {
 		t.Errorf("Unexpected error creating store: %v", err)
 	}
@@ -68,7 +68,7 @@ func TestThreadSafeStoreAddKeepsNonEmptySetPostDeleteFromIndex(t *testing.T) {
 		},
 	}
 
-	store, err := NewThreadSafeStore(reflect.TypeOf(""), indexers)
+	store, err := NewThreadSafeStore(reflect.TypeOf(""), indexers, nil)
 	if err != nil {
 		t.Errorf("Unexpected error creating store: %v", err)
 	}
@@ -111,7 +111,7 @@ func TestThreadSafeStoreIndexingFunctionsWithMultipleValues(t *testing.T) {
 		},
 	}
 
-	store, err := NewThreadSafeStore(reflect.TypeOf(""), indexers)
+	store, err := NewThreadSafeStore(reflect.TypeOf(""), indexers, nil)
 	if err != nil {
 		t.Errorf("Unexpected error creating store: %v", err)
 	}
@@ -193,7 +193,7 @@ func BenchmarkIndexer(b *testing.B) {
 		},
 	}
 
-	store, err := NewThreadSafeStore(reflect.TypeOf(""), indexers)
+	store, err := NewThreadSafeStore(reflect.TypeOf(""), indexers, nil)
 	if err != nil {
 		b.Errorf("Unexpected error creating store: %v", err)
 	}
