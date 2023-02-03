@@ -254,7 +254,7 @@ func (s *sqlThreadSafeStore) Get(key string) (item interface{}, exists bool) {
 
 // SafeGet returns the object associated with the given object's key
 func (s *sqlThreadSafeStore) SafeGet(key string) (item interface{}, exists bool, err error) {
-	result, err := s.queryObjects(s.getStmt, key)
+	result, err := queryObjects(s.getStmt, s.typ, key)
 	if err != nil {
 		return nil, false, err
 	}
@@ -277,7 +277,7 @@ func (s *sqlThreadSafeStore) List() []interface{} {
 
 // SafeList returns a list of all the currently known objects
 func (s *sqlThreadSafeStore) SafeList() ([]interface{}, error) {
-	return s.queryObjects(s.listStmt)
+	return queryObjects(s.listStmt, s.typ)
 }
 
 // ListKeys wraps SafeListKeys and panics in case of I/O errors
@@ -291,7 +291,7 @@ func (s *sqlThreadSafeStore) ListKeys() []string {
 
 // SafeListKeys returns a list of all the keys currently in this store
 func (s *sqlThreadSafeStore) SafeListKeys() ([]string, error) {
-	return s.queryStrings(s.listKeysStmt)
+	return queryStrings(s.listKeysStmt)
 }
 
 // Replace wraps SafeReplace and panics in case of I/O errors
@@ -360,7 +360,7 @@ func (s *sqlThreadSafeStore) Index(indexName string, obj interface{}) ([]interfa
 		params = append(params, value)
 	}
 
-	return s.queryObjects(stmt, params...)
+	return queryObjects(stmt, s.typ, params...)
 }
 
 // IndexKeys returns a list of the Store keys of the objects whose indexed values in the given index include the given indexed value
@@ -370,7 +370,7 @@ func (s *sqlThreadSafeStore) IndexKeys(indexName, indexedValue string) ([]string
 		return nil, fmt.Errorf("Index with name %s does not exist", indexName)
 	}
 
-	return s.queryStrings(s.listKeysFromIndexStmt, indexName, indexedValue)
+	return queryStrings(s.listKeysFromIndexStmt, indexName, indexedValue)
 }
 
 // ListIndexFuncValues wraps SafeListIndexFuncValues and panics in case of I/O errors
@@ -384,13 +384,13 @@ func (s *sqlThreadSafeStore) ListIndexFuncValues(name string) []string {
 
 // SafeListIndexFuncValues returns all the indexed values of the given index
 func (s *sqlThreadSafeStore) SafeListIndexFuncValues(indexName string) ([]string, error) {
-	return s.queryStrings(s.listIndexFuncValuesStmt, indexName)
+	return queryStrings(s.listIndexFuncValuesStmt, indexName)
 }
 
 // ByIndex returns the stored objects whose set of indexed values
 // for the named index includes the given indexed value
 func (s *sqlThreadSafeStore) ByIndex(indexName, indexedValue string) ([]interface{}, error) {
-	return s.queryObjects(s.listObjectsFromIndex, indexName, indexedValue)
+	return queryObjects(s.listObjectsFromIndex, s.typ, indexName, indexedValue)
 }
 
 // GetIndexers return the indexers
@@ -417,9 +417,8 @@ func (s *sqlThreadSafeStore) Close() error {
 	return s.db.Close()
 }
 
-// queryObjects expects a sql.Rows pointer with one column which is byte slice containing a
-// gobbed object, and returns a slice of objects
-func (s *sqlThreadSafeStore) queryObjects(stmt *sql.Stmt, params ...any) ([]interface{}, error) {
+// queryObjects runs a prepared statement that returns gobbed objects of type typ
+func queryObjects(stmt *sql.Stmt, typ reflect.Type, params ...any) ([]interface{}, error) {
 	rows, err := stmt.Query(params...)
 	if err != nil {
 		return nil, err
@@ -434,7 +433,7 @@ func (s *sqlThreadSafeStore) queryObjects(stmt *sql.Stmt, params ...any) ([]inte
 		}
 
 		dec := gob.NewDecoder(bytes.NewReader(buf))
-		singleResult := reflect.New(s.typ)
+		singleResult := reflect.New(typ)
 		err = dec.DecodeValue(singleResult)
 		if err != nil {
 			return closeOnError(rows, err)
@@ -467,9 +466,8 @@ func closeOnError(rows *sql.Rows, err error) ([]interface{}, error) {
 	return nil, err
 }
 
-// queryStrings expects a sql.Rows pointer with one column which is a string,
-// and returns a slice of strings
-func (s *sqlThreadSafeStore) queryStrings(stmt *sql.Stmt, params ...any) ([]string, error) {
+// queryObjects runs a prepared statement that returns strings
+func queryStrings(stmt *sql.Stmt, params ...any) ([]string, error) {
 	rows, err := stmt.Query(params...)
 	if err != nil {
 		return nil, err
