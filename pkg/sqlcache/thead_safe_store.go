@@ -305,12 +305,7 @@ func (s *sqlThreadSafeStore) ListKeys() []string {
 
 // SafeListKeys returns a list of all the keys currently in this store
 func (s *sqlThreadSafeStore) SafeListKeys() ([]string, error) {
-	rows, err := s.listKeysStmt.Query()
-	if err != nil {
-		return nil, err
-	}
-
-	return s.processStringRows(rows)
+	return s.queryStrings(s.listKeysStmt)
 }
 
 // Replace wraps SafeReplace and panics in case of I/O errors
@@ -389,12 +384,7 @@ func (s *sqlThreadSafeStore) IndexKeys(indexName, indexedValue string) ([]string
 		return nil, fmt.Errorf("Index with name %s does not exist", indexName)
 	}
 
-	rows, err := s.listKeysFromIndexStmt.Query(indexName, indexedValue)
-	if err != nil {
-		return nil, err
-	}
-
-	return s.processStringRows(rows)
+	return s.queryStrings(s.listKeysFromIndexStmt, indexName, indexedValue)
 }
 
 // ListIndexFuncValues wraps SafeListIndexFuncValues and panics in case of I/O errors
@@ -408,12 +398,7 @@ func (s *sqlThreadSafeStore) ListIndexFuncValues(name string) []string {
 
 // SafeListIndexFuncValues returns all the indexed values of the given index
 func (s *sqlThreadSafeStore) SafeListIndexFuncValues(indexName string) ([]string, error) {
-	rows, err := s.listIndexFuncValuesStmt.Query(indexName)
-	if err != nil {
-		return nil, err
-	}
-
-	return s.processStringRows(rows)
+	return s.queryStrings(s.listIndexFuncValuesStmt, indexName)
 }
 
 // ByIndex returns the stored objects whose set of indexed values
@@ -495,9 +480,14 @@ func closeOnError(rows *sql.Rows, err error) ([]interface{}, error) {
 	return nil, err
 }
 
-// processStringRows expects a sql.Rows pointer with one column which is a string,
+// queryStrings expects a sql.Rows pointer with one column which is a string,
 // and returns a slice of strings
-func (s *sqlThreadSafeStore) processStringRows(rows *sql.Rows) ([]string, error) {
+func (s *sqlThreadSafeStore) queryStrings(stmt *sql.Stmt, params ...any) ([]string, error) {
+	rows, err := stmt.Query(params...)
+	if err != nil {
+		return nil, err
+	}
+
 	var result []string
 	for rows.Next() {
 		var key string
@@ -511,7 +501,7 @@ func (s *sqlThreadSafeStore) processStringRows(rows *sql.Rows) ([]string, error)
 
 		result = append(result, key)
 	}
-	err := rows.Err()
+	err = rows.Err()
 	if err != nil {
 		ce := rows.Close()
 		if ce != nil {
