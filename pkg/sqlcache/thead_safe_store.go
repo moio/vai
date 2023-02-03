@@ -37,6 +37,13 @@ const DB_LOCATION = "./sqlstore.sqlite"
 
 // NewThreadSafeStore returns a cache.ThreadSafeStore backed by SQLite for the type typ
 func NewThreadSafeStore(typ reflect.Type, indexers cache.Indexers) (IOThreadSafeStore, error) {
+	// sanity checks first
+	for key := range indexers {
+		if strings.Contains(key, `"`) {
+			panic("Quote characters (\") in indexer names are not supported")
+		}
+	}
+
 	err := os.RemoveAll(DB_LOCATION)
 	if err != nil {
 		return nil, err
@@ -46,7 +53,7 @@ func NewThreadSafeStore(typ reflect.Type, indexers cache.Indexers) (IOThreadSafe
 		return nil, err
 	}
 
-	err = initSchema(db, indexers)
+	err = initSchema(db)
 	if err != nil {
 		return nil, err
 	}
@@ -134,14 +141,7 @@ func NewThreadSafeStore(typ reflect.Type, indexers cache.Indexers) (IOThreadSafe
 }
 
 // initSchema prepares the schema on a fresh SQLite database
-func initSchema(db *sql.DB, indexers cache.Indexers) error {
-	// sanity checks
-	for key := range indexers {
-		if strings.Contains(key, `"`) {
-			panic("Quote characters (\") in indexer names are not supported")
-		}
-	}
-
+func initSchema(db *sql.DB) error {
 	// schema definition statements
 	stmts := []string{
 		`DROP TABLE IF EXISTS indices`,
