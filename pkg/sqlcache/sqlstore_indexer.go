@@ -20,7 +20,7 @@ func NewStore(keyfunc cache.KeyFunc, typ reflect.Type) (IOStore, error) {
 
 // NewIndexer returns an cache.Indexer backed by SQLite for the type typ
 func NewIndexer(keyfunc cache.KeyFunc, typ reflect.Type, indexers cache.Indexers) (IOIndexer, error) {
-	threadSafeStore, err := NewThreadSafeStore(typ, indexers, nil)
+	threadSafeStore, err := NewThreadSafeStore(typ, indexers)
 	if err != nil {
 		return nil, err
 	}
