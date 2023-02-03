@@ -159,7 +159,7 @@ func initTempSQLiteDB(stmts []string) (*sql.DB, error) {
 	for _, stmt := range stmts {
 		_, err := db.Exec(stmt)
 		if err != nil {
-			return nil, errors.Wrap(err, "Error initializing DB")
+			return nil, errors.Wrapf(err, "Error initializing DB, statement was: %s", stmt)
 		}
 	}
 
