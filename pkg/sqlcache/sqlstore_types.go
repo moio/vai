@@ -1,13 +1,9 @@
 package sqlcache
 
 import (
-	"database/sql"
 	_ "github.com/mattn/go-sqlite3"
-	"github.com/pkg/errors"
 	"io"
 	"k8s.io/client-go/tools/cache"
-	"reflect"
-	"strings"
 )
 
 // IOStore is a cache.Store that uses some backing I/O, thus:
@@ -17,183 +13,58 @@ type IOStore interface {
 	cache.Store
 	io.Closer
 
-	// SafeList returns a list of all the currently non-empty accumulators
+	// SafeList returns a list of all the currently known objects
 	SafeList() ([]interface{}, error)
 
-	// SafeListKeys returns a list of all the keys currently associated with non-empty accumulators
+	// SafeListKeys returns a list of all the keys currently in this store
 	SafeListKeys() ([]string, error)
 }
 
 // IOIndexer is a cache.Indexer that uses some backing I/O, thus:
 // 1) it has a Close() method
-// 2) List* methods may panic on I/O errors. Safe* (error-returning) variants are added
+// 2) data methods may panic on I/O errors. Safe* (error-returning) variants are added
 type IOIndexer interface {
 	cache.Indexer
 	io.Closer
 
-	// SafeList returns a list of all the currently non-empty accumulators
+	// SafeList returns a list of all the currently known objects
 	SafeList() ([]interface{}, error)
 
-	// SafeListKeys returns a list of all the keys currently associated with non-empty accumulators
+	// SafeListKeys returns a list of all the keys currently in this store
 	SafeListKeys() ([]string, error)
 
 	// SafeListIndexFuncValues returns all the indexed values of the given index
 	SafeListIndexFuncValues(indexName string) ([]string, error)
 }
 
-// sqlIndexer is a cache.Indexer which stores objects in a SQL database
-type sqlIndexer struct {
-	keyfunc cache.KeyFunc
-	typ     reflect.Type
+// IOThreadSafeStore is a cache.ThreadSafeStore that uses some backing I/O, thus:
+// 1) it has a Close() method
+// 2) data methods may panic on I/O errors. Safe* (error-returning) variants are added
+type IOThreadSafeStore interface {
+	cache.ThreadSafeStore
+	io.Closer
 
-	db *sql.DB
+	// SafeAdd saves an obj with its key, or updates key with obj if it exists in this store
+	SafeAdd(key string, obj interface{}) error
 
-	addStmt                 *sql.Stmt
-	addIndexStmt            *sql.Stmt
-	deleteIndexStmt         *sql.Stmt
-	getStmt                 *sql.Stmt
-	deleteStmt              *sql.Stmt
-	listStmt                *sql.Stmt
-	deleteAllStmt           *sql.Stmt
-	listKeysStmt            *sql.Stmt
-	listObjectsFromIndex    *sql.Stmt
-	listKeysFromIndexStmt   *sql.Stmt
-	listIndexFuncValuesStmt *sql.Stmt
+	// SafeUpdate saves an obj with its key, or updates key with obj if it exists in this store
+	SafeUpdate(key string, obj interface{}) error
 
-	indexers cache.Indexers
-}
+	// SafeDelete deletes the object associated with key, if it exists in this store
+	SafeDelete(key string) error
 
-func initSchema(db *sql.DB, indexers cache.Indexers) error {
-	// sanity checks
-	for key := range indexers {
-		if strings.Contains(key, `"`) {
-			panic("Quote characters (\") in indexer names are not supported")
-		}
-	}
+	// SafeGet returns the object associated with the given object's key
+	SafeGet(key string) (item interface{}, exists bool, err error)
 
-	// schema definition statements
-	stmts := []string{
-		`DROP TABLE IF EXISTS indices`,
-		`DROP TABLE IF EXISTS objects`,
-		`CREATE TABLE objects (
-			key VARCHAR UNIQUE NOT NULL PRIMARY KEY,
-			object BLOB
-        )`,
-		`CREATE TABLE indices (
-			name VARCHAR NOT NULL,
-			value VARCHAR NOT NULL,
-			key VARCHAR NOT NULL REFERENCES objects(key) ON DELETE CASCADE,
-			PRIMARY KEY (name, value, key)
-        )`,
-		"CREATE INDEX indices_name_value_index ON indices(name, value)",
-	}
+	// SafeReplace will delete the contents of the store, using instead the given list
+	SafeReplace(map[string]interface{}, string) error
 
-	for _, stmt := range stmts {
-		_, err := db.Exec(stmt)
-		if err != nil {
-			return errors.Wrap(err, "Error initializing DB")
-		}
-	}
+	// SafeList returns a list of all the currently known objects
+	SafeList() ([]interface{}, error)
 
-	return nil
-}
+	// SafeListKeys returns a list of all the keys currently in this store
+	SafeListKeys() ([]string, error)
 
-// NewIndexer returns an IOIndexer backed by SQLite for the type typ
-func NewIndexer(keyfunc cache.KeyFunc, typ reflect.Type, indexers cache.Indexers) (IOIndexer, error) {
-	db, err := sql.Open("sqlite3", "./sqlstore.sqlite?mode=rwc&_journal_mode=memory&_synchronous=off&_mutex=no&_foreign_keys=on")
-	if err != nil {
-		return nil, err
-	}
-
-	err = initSchema(db, indexers)
-	if err != nil {
-		return nil, err
-	}
-
-	// Using UPSERT for both Add() and Update()
-	// Add() calls will not fail on existing keys and Update() calls new objects will not fail as well
-	// This seems to be a common pattern at least in client-go, specifically cache.ThreadSafeStore
-	addStmt, err := db.Prepare("INSERT INTO objects(key, object) VALUES (?, ?) ON CONFLICT DO UPDATE SET object = excluded.object")
-	if err != nil {
-		return nil, err
-	}
-
-	addIndexStmt, err := db.Prepare("INSERT INTO indices(name, value, key) VALUES (?, ?, ?)")
-	if err != nil {
-		return nil, err
-	}
-
-	deleteIndexStmt, err := db.Prepare("DELETE FROM indices WHERE key = ?")
-	if err != nil {
-		return nil, err
-	}
-
-	getStmt, err := db.Prepare("SELECT object FROM objects WHERE key = ?")
-	if err != nil {
-		return nil, err
-	}
-
-	deleteStmt, err := db.Prepare("DELETE FROM objects WHERE key = ?")
-	if err != nil {
-		return nil, err
-	}
-
-	listStmt, err := db.Prepare("SELECT object FROM objects")
-	if err != nil {
-		return nil, err
-	}
-
-	deleteAllStmt, err := db.Prepare("DELETE FROM objects")
-	if err != nil {
-		return nil, err
-	}
-
-	listKeysStmt, err := db.Prepare("SELECT key FROM objects")
-	if err != nil {
-		return nil, err
-	}
-
-	listObjectsFromIndexStmt, err := db.Prepare(`
-		SELECT object FROM objects
-			WHERE key IN (
-			    SELECT key FROM indices
-			    	WHERE name = ? AND value = ?
-			)
-	`)
-	if err != nil {
-		return nil, err
-	}
-
-	listKeysFromIndexStmt, err := db.Prepare(`SELECT DISTINCT key FROM indices WHERE name = ? AND value = ?`)
-	if err != nil {
-		return nil, err
-	}
-
-	listIndexFuncValuesStmt, err := db.Prepare(`SELECT DISTINCT value FROM indices WHERE name = ?`)
-	if err != nil {
-		return nil, err
-	}
-
-	return &sqlIndexer{
-		typ:                     typ,
-		keyfunc:                 keyfunc,
-		db:                      db,
-		addStmt:                 addStmt,
-		addIndexStmt:            addIndexStmt,
-		deleteIndexStmt:         deleteIndexStmt,
-		getStmt:                 getStmt,
-		deleteStmt:              deleteStmt,
-		listStmt:                listStmt,
-		deleteAllStmt:           deleteAllStmt,
-		listKeysStmt:            listKeysStmt,
-		indexers:                indexers,
-		listObjectsFromIndex:    listObjectsFromIndexStmt,
-		listKeysFromIndexStmt:   listKeysFromIndexStmt,
-		listIndexFuncValuesStmt: listIndexFuncValuesStmt,
-	}, nil
-}
-
-// NewStore returns an IOStore backed by SQLite for the type typ
-func NewStore(keyfunc cache.KeyFunc, typ reflect.Type) (IOStore, error) {
-	return NewIndexer(keyfunc, typ, cache.Indexers{})
+	// SafeListIndexFuncValues returns all the indexed values of the given index
+	SafeListIndexFuncValues(indexName string) ([]string, error)
 }

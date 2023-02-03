@@ -1,114 +1,163 @@
 package sqlcache
 
 import (
-	"fmt"
 	_ "github.com/mattn/go-sqlite3"
-	"github.com/pkg/errors"
 	"k8s.io/client-go/tools/cache"
-	"strings"
+	"reflect"
 )
+
+// sqlIndexer is a cache.Store and cache.Indexer which stores objects in a SQL database
+// delegates the heavy lifting to a cache.ThreadSafeStore
+type sqlIndexer struct {
+	keyfunc         cache.KeyFunc
+	threadSafeStore IOThreadSafeStore
+}
+
+// NewStore returns an cache.Store backed by SQLite for the type typ
+func NewStore(keyfunc cache.KeyFunc, typ reflect.Type) (IOStore, error) {
+	return NewIndexer(keyfunc, typ, cache.Indexers{})
+}
+
+// NewIndexer returns an cache.Indexer backed by SQLite for the type typ
+func NewIndexer(keyfunc cache.KeyFunc, typ reflect.Type, indexers cache.Indexers) (IOIndexer, error) {
+	threadSafeStore, err := NewThreadSafeStore(typ, indexers)
+	if err != nil {
+		return nil, err
+	}
+	return &sqlIndexer{
+		keyfunc:         keyfunc,
+		threadSafeStore: threadSafeStore,
+	}, nil
+}
+
+/* Satisfy IOStore */
+
+// Add saves an obj, or updates it if it exists in this store
+func (s *sqlIndexer) Add(obj interface{}) error {
+	key, err := s.keyfunc(obj)
+	if err != nil {
+		return err
+	}
+
+	return s.threadSafeStore.SafeAdd(key, obj)
+}
+
+// Update saves an obj, or updates it if it exists in this store
+func (s *sqlIndexer) Update(obj interface{}) error {
+	key, err := s.keyfunc(obj)
+	if err != nil {
+		return err
+	}
+	return s.threadSafeStore.SafeUpdate(key, obj)
+}
+
+// Delete deletes the given object, if it exists in this store
+func (s *sqlIndexer) Delete(obj interface{}) error {
+	key, err := s.keyfunc(obj)
+	if err != nil {
+		return err
+	}
+
+	return s.threadSafeStore.SafeDelete(key)
+}
+
+// Get returns the object with the same key as obj
+func (s *sqlIndexer) Get(obj interface{}) (item interface{}, exists bool, err error) {
+	key, err := s.keyfunc(obj)
+	if err != nil {
+		return nil, false, err
+	}
+
+	return s.GetByKey(key)
+}
+
+// GetByKey returns the object associated with the given object's key
+func (s *sqlIndexer) GetByKey(key string) (item interface{}, exists bool, err error) {
+	return s.threadSafeStore.SafeGet(key)
+}
+
+// List wraps SafeList and panics in case of I/O errors
+func (s *sqlIndexer) List() []interface{} {
+	return s.threadSafeStore.List()
+}
+
+// SafeList returns a list of all the currently known objects
+func (s *sqlIndexer) SafeList() ([]interface{}, error) {
+	return s.threadSafeStore.SafeList()
+}
+
+// ListKeys wraps SafeListKeys and panics in case of I/O errors
+func (s *sqlIndexer) ListKeys() []string {
+	return s.threadSafeStore.ListKeys()
+}
+
+// SafeListKeys returns a list of all the keys currently in this store
+func (s *sqlIndexer) SafeListKeys() ([]string, error) {
+	return s.threadSafeStore.SafeListKeys()
+}
+
+// Replace will delete the contents of the store, using instead the given list
+func (s *sqlIndexer) Replace(objects []interface{}, dc string) error {
+	objectMap := map[string]interface{}{}
+
+	for _, object := range objects {
+		key, err := s.keyfunc(object)
+		if err != nil {
+			return err
+		}
+		objectMap[key] = object
+	}
+
+	return s.threadSafeStore.SafeReplace(objectMap, dc)
+}
+
+// Resync is a no-op and is deprecated
+func (s *sqlIndexer) Resync() error {
+	return s.threadSafeStore.Resync()
+}
 
 /* Satisfy cache.IOIndexer */
 
 // Index returns a list of items that match the given object on the index function
 func (s *sqlIndexer) Index(indexName string, obj interface{}) ([]interface{}, error) {
-	indexFunc := s.indexers[indexName]
-	if indexFunc == nil {
-		return nil, fmt.Errorf("Index with name %s does not exist", indexName)
-	}
-
-	values, err := indexFunc(obj)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(values) == 0 {
-		return nil, nil
-	}
-
-	// typical case
-	if len(values) == 1 {
-		return s.ByIndex(indexName, values[0])
-	}
-
-	// atypical case - more than one value to lookup
-	// HACK: sql.Statement.Query does not allow to pass slices in as of go 1.19 - use an unprepared statement
-	query := fmt.Sprintf(`
-			SELECT object FROM objects
-				WHERE key IN (
-					SELECT key FROM indices
-						WHERE name = ? AND value IN (?%s)
-				)
-		`, strings.Repeat(", ?", len(values)-1))
-
-	// HACK: Query will accept []any but not []string
-	params := []any{indexName}
-	for _, value := range values {
-		params = append(params, value)
-	}
-
-	rows, err := s.db.Query(query, params...)
-	if err != nil {
-		return nil, err
-	}
-	return s.processObjectRows(rows)
+	return s.threadSafeStore.Index(indexName, obj)
 }
 
 // IndexKeys returns a list of the Store keys of the objects whose indexed values in the given index include the given indexed value
 func (s *sqlIndexer) IndexKeys(indexName, indexedValue string) ([]string, error) {
-	indexFunc := s.indexers[indexName]
-	if indexFunc == nil {
-		return nil, fmt.Errorf("Index with name %s does not exist", indexName)
-	}
-
-	rows, err := s.listKeysFromIndexStmt.Query(indexName, indexedValue)
-	if err != nil {
-		return nil, err
-	}
-
-	return s.processStringRows(rows)
+	return s.threadSafeStore.IndexKeys(indexName, indexedValue)
 }
 
 // ListIndexFuncValues returns all the indexed values of the given index
 func (s *sqlIndexer) ListIndexFuncValues(indexName string) []string {
-	result, err := s.SafeListIndexFuncValues(indexName)
-	if err != nil {
-		panic(errors.Wrap(err, "Unexpected error in sqlIndexer.ListIndexFuncValues"))
-	}
-
-	return result
+	return s.threadSafeStore.ListIndexFuncValues(indexName)
 }
 
 // SafeListIndexFuncValues returns all the indexed values of the given index
 func (s *sqlIndexer) SafeListIndexFuncValues(indexName string) ([]string, error) {
-	rows, err := s.listIndexFuncValuesStmt.Query(indexName)
-	if err != nil {
-		return nil, err
-	}
-
-	return s.processStringRows(rows)
+	return s.threadSafeStore.SafeListIndexFuncValues(indexName)
 }
 
 // ByIndex returns the stored objects whose set of indexed values
 // for the named index includes the given indexed value
 func (s *sqlIndexer) ByIndex(indexName, indexedValue string) ([]interface{}, error) {
-	rows, err := s.listObjectsFromIndex.Query(indexName, indexedValue)
-	if err != nil {
-		return nil, err
-	}
-	return s.processObjectRows(rows)
+	return s.threadSafeStore.ByIndex(indexName, indexedValue)
 }
 
 // GetIndexers return the indexers
 func (s *sqlIndexer) GetIndexers() cache.Indexers {
-	return s.indexers
+	return s.threadSafeStore.GetIndexers()
 }
 
 // AddIndexers adds more indexers to this store.  If you call this after you already have data
 // in the store, the results are undefined.
 func (s *sqlIndexer) AddIndexers(newIndexers cache.Indexers) error {
-	for k, v := range newIndexers {
-		s.indexers[k] = v
-	}
-	return nil
+	return s.threadSafeStore.AddIndexers(newIndexers)
+}
+
+/* Satisfy io.Closer */
+
+// Close closes the database and prevents new queries from starting
+func (s *sqlIndexer) Close() error {
+	return s.threadSafeStore.Close()
 }
