@@ -15,11 +15,10 @@ Additionally, SQLite make it easier to develop custom sorting, filtering, pagina
 * `sqlcache.NewStore` returns a SQLite-backed cache.Store instance that passes client-go's unit tests
 * `sqlcache.NewIndexer` returns a SQLite-backed cache.Indexer instance that passes client-go's unit tests
 * `sqlcache.NewThreadSafeStore` returns a SQLite-backed cache.NewThreadSafeStore instance that passes client-go's unit tests
-* `sqlcache.NewVersionedStore` returns a SQLite-backed cache.Store instance that keeps track of past versions of resources
+* `sqlcache.NewVersionedIndexer` returns a SQLite-backed cache.Indexer instance that keeps track of past versions of resources
 
 Next steps:
-* Build a `Reflector` with a `VersionedStore`
-* Potentially build a `VersionedIndexer`
 * Add capabilities to sort/filter/paginate
+* Build a `Reflector` with a `VersionedIndexer`
 
 This project has originated in [SUSE HackWeek](https://hackweek.opensuse.org/22/projects/vai-a-kubernetes-api-caching-layer).
