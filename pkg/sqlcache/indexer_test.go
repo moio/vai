@@ -7,6 +7,7 @@ Adapted from client-go, Copyright 2014 The Kubernetes Authors.
 package sqlcache
 
 import (
+	"github.com/stretchr/testify/assert"
 	"reflect"
 	"testing"
 
@@ -164,12 +165,47 @@ func testStoreIndexMultiFunc(obj interface{}) ([]string, error) {
 	return []string{"non_b_value"}, nil
 }
 
-func TestSQLIndexer(t *testing.T) {
-	store, err := NewIndexer(testStoreKeyFunc, reflect.TypeOf(testStoreObject{}), testStoreIndexers())
+func TestIndexer(t *testing.T) {
+	store, err := NewIndexer(reflect.TypeOf(testStoreObject{}), testStoreKeyFunc, TEST_DB_LOCATION, testStoreIndexers())
 	if err != nil {
 		t.Error(err)
 	}
 	doTestIndex(t, store)
+	err = store.Close()
+	if err != nil {
+		return
+	}
+}
+
+var currentVersion = 0
+
+func testVersionFunc(obj any) (int, error) {
+	currentVersion += 1
+	return currentVersion, nil
+}
+
+func TestVersionedIndexer(t *testing.T) {
+	store, err := NewVersionedIndexer(reflect.TypeOf(testStoreObject{}), testStoreKeyFunc, testVersionFunc, TEST_DB_LOCATION, testStoreIndexers())
+	if err != nil {
+		t.Error(err)
+	}
+	doTestIndex(t, store)
+
+	assert := assert.New(t)
+
+	item, found, err := store.GetByKeyAndVersion("g", 4)
+	assert.Equal(true, found)
+	assert.Equal("g", item.(testStoreObject).Id)
+	assert.Equal("h", item.(testStoreObject).Val)
+
+	item, found, err = store.GetByKeyAndVersion("g", 5)
+	assert.Equal(true, found)
+	assert.Equal("g", item.(testStoreObject).Id)
+	assert.Equal("h2", item.(testStoreObject).Val)
+
+	item, found, err = store.GetByKeyAndVersion("g", 6)
+	assert.Equal(false, found)
+
 	err = store.Close()
 	if err != nil {
 		return

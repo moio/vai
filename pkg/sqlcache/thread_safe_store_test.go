@@ -18,6 +18,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+const TEST_DB_LOCATION = "./sqlstore.sqlite"
+
 func TestThreadSafeStoreDeleteRemovesEmptySetsFromIndex(t *testing.T) {
 	testIndexer := "testIndexer"
 
@@ -28,9 +30,9 @@ func TestThreadSafeStoreDeleteRemovesEmptySetsFromIndex(t *testing.T) {
 		},
 	}
 
-	store, err := NewThreadSafeStore(reflect.TypeOf(""), indexers)
+	store, err := NewThreadSafeStore(reflect.TypeOf(""), TEST_DB_LOCATION, indexers)
 	if err != nil {
-		t.Errorf("Unexpected error creating store: %v", err)
+		t.Errorf("Unexpected error creating ThreadSafeStore: %v", err)
 	}
 
 	testKey := "testKey"
@@ -68,9 +70,9 @@ func TestThreadSafeStoreAddKeepsNonEmptySetPostDeleteFromIndex(t *testing.T) {
 		},
 	}
 
-	store, err := NewThreadSafeStore(reflect.TypeOf(""), indexers)
+	store, err := NewThreadSafeStore(reflect.TypeOf(""), TEST_DB_LOCATION, indexers)
 	if err != nil {
-		t.Errorf("Unexpected error creating store: %v", err)
+		t.Errorf("Unexpected error creating ThreadSafeStore: %v", err)
 	}
 
 	store.Add("retain", "retain")
@@ -111,9 +113,9 @@ func TestThreadSafeStoreIndexingFunctionsWithMultipleValues(t *testing.T) {
 		},
 	}
 
-	store, err := NewThreadSafeStore(reflect.TypeOf(""), indexers)
+	store, err := NewThreadSafeStore(reflect.TypeOf(""), TEST_DB_LOCATION, indexers)
 	if err != nil {
-		t.Errorf("Unexpected error creating store: %v", err)
+		t.Errorf("Unexpected error creating ThreadSafeStore: %v", err)
 	}
 
 	store.Add("key1", "foo")
@@ -193,9 +195,9 @@ func BenchmarkIndexer(b *testing.B) {
 		},
 	}
 
-	store, err := NewThreadSafeStore(reflect.TypeOf(""), indexers)
+	store, err := NewThreadSafeStore(reflect.TypeOf(""), TEST_DB_LOCATION, indexers)
 	if err != nil {
-		b.Errorf("Unexpected error creating store: %v", err)
+		b.Errorf("Unexpected error creating ThreadSafeStore: %v", err)
 	}
 
 	// The following benchmark imitates what is happening in indexes

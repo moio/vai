@@ -133,22 +133,8 @@ type testStoreObject struct {
 	Val string
 }
 
-func TestSQLStore(t *testing.T) {
-	store, err := NewStore(testStoreKeyFunc, reflect.TypeOf(testStoreObject{}))
-	if err != nil {
-		t.Error(err)
-	}
-	doTestStore(t, store)
-	err = store.Close()
-	if err != nil {
-		return
-	}
-}
-
-func TestNewVersionedStore(t *testing.T) {
-	store, err := NewVersionedStore(reflect.TypeOf(testStoreObject{}), testStoreKeyFunc, func(obj interface{}) (int, error) {
-		return 1, nil
-	})
+func TestStore(t *testing.T) {
+	store, err := NewStore(reflect.TypeOf(testStoreObject{}), testStoreKeyFunc, TEST_DB_LOCATION)
 	if err != nil {
 		t.Error(err)
 	}
