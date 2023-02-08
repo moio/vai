@@ -87,8 +87,22 @@ func (s *Store) Upsert(key string, obj any) error {
 
 // DeleteByKey deletes the object associated with key, if it exists in this Store
 func (s *Store) DeleteByKey(key string) error {
-	_, err := s.deleteStmt.Exec(key)
-	return err
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Stmt(s.deleteStmt).Exec(key)
+	if err != nil {
+		return s.rollback(err, tx)
+	}
+
+	err = s.runAfterDelete(key, tx)
+	if err != nil {
+		return s.rollback(err, tx)
+	}
+
+	return tx.Commit()
 }
 
 // GetByKey returns the object associated with the given object's key
