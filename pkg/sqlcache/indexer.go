@@ -27,7 +27,7 @@ func NewIndexer(typ reflect.Type, keyFunc cache.KeyFunc, path string, indexers c
 	// sanity checks first
 	for key := range indexers {
 		if strings.Contains(key, `"`) {
-			panic("Quote characters (\") in i names are not supported")
+			panic("Quote characters (\") in indexer names are not supported")
 		}
 	}
 
