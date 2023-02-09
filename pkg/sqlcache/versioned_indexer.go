@@ -25,7 +25,7 @@ func NewVersionedIndexer(typ reflect.Type, keyFunc cache.KeyFunc, versionFunc Ve
 	err = i.InitExec(`CREATE TABLE object_history (
 			key VARCHAR NOT NULL,
 			version INTEGER NOT NULL,
-			deleted INTEGER NOT NULL DEFAULT 0,
+			deleted_version INTEGER DEFAULT NULL,
 			object BLOB NOT NULL,
 			PRIMARY KEY (key, version)
 	   )`)
@@ -44,14 +44,14 @@ func NewVersionedIndexer(typ reflect.Type, keyFunc cache.KeyFunc, versionFunc Ve
 	v.RegisterAfterUpsert(v.AfterUpsert)
 	v.RegisterAfterDelete(v.AfterDelete)
 
-	v.addHistoryStmt = v.Prepare(`INSERT INTO object_history(key, version, deleted, object)
-		SELECT ?, ?, 0, object
+	v.addHistoryStmt = v.Prepare(`INSERT INTO object_history(key, version, deleted_version, object)
+		SELECT ?, ?, NULL, object
 			FROM objects
 			WHERE key = ?
 			ON CONFLICT
-			    DO UPDATE SET object = excluded.object, deleted = 0`)
-	v.deleteHistoryStmt = v.Prepare(`UPDATE object_history SET deleted = 1 WHERE key = ? AND version = (SELECT MAX(version) FROM object_history WHERE key = ?)`)
-	v.getByVersionStmt = v.Prepare(`SELECT object FROM object_history WHERE key = ? AND version = ?`)
+			    DO UPDATE SET object = excluded.object, deleted_version = NULL`)
+	v.deleteHistoryStmt = v.Prepare(`UPDATE object_history SET deleted_version = (SELECT MAX(version) FROM object_history) WHERE key = ?`)
+	v.getByVersionStmt = v.Prepare(`SELECT object FROM object_history WHERE key = ? AND version = ? AND (deleted_version IS NULL OR deleted_version > ?)`)
 
 	return v, nil
 }
@@ -70,13 +70,13 @@ func (v *VersionedIndexer) AfterUpsert(key string, obj any, tx *sql.Tx) error {
 
 // AfterDelete updates the deleted flag on the history table
 func (v *VersionedIndexer) AfterDelete(key string, tx *sql.Tx) error {
-	_, err := tx.Stmt(v.deleteHistoryStmt).Exec(key, key)
+	_, err := tx.Stmt(v.deleteHistoryStmt).Exec(key)
 	return err
 }
 
-// GetByKeyAndVersion returns the object associated with the given object's key and version
+// GetByKeyAndVersion returns the object associated with the given object's key and (exact) version
 func (v *VersionedIndexer) GetByKeyAndVersion(key string, version int) (item any, exists bool, err error) {
-	result, err := v.QueryObjects(v.getByVersionStmt, key, version)
+	result, err := v.QueryObjects(v.getByVersionStmt, key, version, version)
 	if err != nil {
 		return nil, false, err
 	}
