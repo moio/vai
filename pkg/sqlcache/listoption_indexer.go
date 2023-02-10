@@ -5,6 +5,7 @@ import (
 	"fmt"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/pkg/errors"
+	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/cache"
 	"strconv"
 	"strings"
@@ -66,7 +67,25 @@ type ListOptionIndexer struct {
 // FieldFunc is a function from an object to a filterable/sortable property. Result can be string, int or bool
 type FieldFunc func(obj any) any
 
-func NewListOptionIndexer(example any, keyFunc cache.KeyFunc, versionFunc VersionFunc, path string, fieldFuncs map[string]FieldFunc) (*ListOptionIndexer, error) {
+func NewListOptionIndexer(example meta.Object, path string, fieldFuncs map[string]FieldFunc) (*ListOptionIndexer, error) {
+	keyFunc := func(a any) (string, error) {
+		o, ok := a.(meta.Object)
+		if !ok {
+			return "", errors.Errorf("Unexpected object does not conform to meta.Object: %v", a)
+		}
+		return o.GetName(), nil
+	}
+	versionFunc := func(a any) (int, error) {
+		o, ok := a.(meta.Object)
+		if !ok {
+			return 0, errors.Errorf("Unexpected object does not conform to meta.Object: %v", a)
+		}
+		i, err := strconv.Atoi(o.GetResourceVersion())
+		if err != nil {
+			return 0, errors.Errorf("Unexpected non-integer version: %v", o.GetResourceVersion())
+		}
+		return i, nil
+	}
 	v, err := NewVersionedIndexer(example, keyFunc, versionFunc, path, cache.Indexers{})
 	if err != nil {
 		return nil, err

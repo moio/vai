@@ -8,72 +8,60 @@ package sqlcache
 
 import (
 	"github.com/stretchr/testify/assert"
+	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"strconv"
 	"testing"
 )
 
-type Car struct {
-	Key      string
-	Revision int
-	Wheels   int
-	Brand    string
-	Color    string
-}
-
-func keyfunc(c any) (string, error) {
-	return c.(*Car).Key, nil
-}
-
-func versionfunc(c any) (int, error) {
-	return c.(*Car).Revision, nil
-}
-
-func wheelsfunc(c any) any {
-	return c.(*Car).Wheels
-}
-
 func brandfunc(c any) any {
-	return c.(*Car).Brand
+	return c.(*v1.Pod).Labels["Brand"]
 }
 
 func colorfunc(c any) any {
-	return c.(*Car).Color
+	return c.(*v1.Pod).Labels["Color"]
 }
 
 var fieldFunc = map[string]FieldFunc{
-	"Wheels": wheelsfunc,
-	"Brand":  brandfunc,
-	"Color":  colorfunc,
+	"Brand": brandfunc,
+	"Color": colorfunc,
 }
 
 func TestListOptionIndexer(t *testing.T) {
 	assert := assert.New(t)
 
-	l, err := NewListOptionIndexer(Car{}, keyfunc, versionfunc, TEST_DB_LOCATION, fieldFunc)
+	l, err := NewListOptionIndexer(&v1.Pod{}, TEST_DB_LOCATION, fieldFunc)
 	if err != nil {
 		t.Error(err)
 	}
 
 	revision := 1
-	red := &Car{
-		Key:      "testa rossa",
-		Revision: revision,
-		Wheels:   4,
-		Brand:    "ferrari",
-		Color:    "red",
+	red := &v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "testa rossa",
+			ResourceVersion: strconv.Itoa(revision),
+			Labels: map[string]string{
+				"Brand": "ferrari",
+				"Color": "red",
+			},
+		},
 	}
 	err = l.Add(red)
 	if err != nil {
 		t.Error(err)
 	}
 
-	// add two cars and list with default options
+	// add two v1.Pods and list with default options
 	revision++
-	blue := &Car{
-		Key:      "focus",
-		Revision: revision,
-		Wheels:   4,
-		Brand:    "ford",
-		Color:    "blue",
+	blue := &v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "focus",
+			ResourceVersion: strconv.Itoa(revision),
+			Labels: map[string]string{
+				"Brand": "ford",
+				"Color": "blue",
+			},
+		},
 	}
 	err = l.Add(blue)
 	if err != nil {
@@ -102,16 +90,16 @@ func TestListOptionIndexer(t *testing.T) {
 		t.Error(err)
 	}
 	assert.Len(r, 1)
-	assert.Equal(r[0].(Car).Key, "focus")
+	assert.Equal(r[0].(*v1.Pod).Name, "focus")
 	// gone also from most-recent store
 	r = l.List()
 	assert.Len(r, 1)
-	assert.Equal(r[0].(Car).Key, "focus")
+	assert.Equal(r[0].(*v1.Pod).Name, "focus")
 
-	// updating the car brings it back
+	// updating the v1.Pod brings it back
 	revision++
-	red.Wheels = 3
-	red.Revision = revision
+	red.ResourceVersion = strconv.Itoa(revision)
+	red.Labels["Wheels"] = "3"
 	err = l.Update(red)
 	if err != nil {
 		t.Error(err)
@@ -129,10 +117,11 @@ func TestListOptionIndexer(t *testing.T) {
 		t.Error(err)
 	}
 	assert.Len(r, 1)
-	assert.Equal(r[0].(Car).Key, "testa rossa")
-	assert.Equal(r[0].(Car).Revision, 3)
+	assert.Equal(r[0].(*v1.Pod).Name, "testa rossa")
+	assert.Equal(r[0].(*v1.Pod).ResourceVersion, "3")
+	assert.Equal(r[0].(*v1.Pod).Labels["Wheels"], "3")
 
-	// historically, car still exists in version 1, gone in version 2, back in version 3
+	// historically, v1.Pod still exists in version 1, gone in version 2, back in version 3
 	lo = ListOptions{
 		Filters:    []Filter{{field: []string{"Brand"}, match: "ferrari"}},
 		Sort:       Sort{},
@@ -157,14 +146,17 @@ func TestListOptionIndexer(t *testing.T) {
 	}
 	assert.Len(r, 1)
 
-	// add another car, test filter by substring and sorting
+	// add another v1.Pod, test filter by substring and sorting
 	revision++
-	black := &Car{
-		Key:      "model 3",
-		Revision: revision,
-		Wheels:   3,
-		Brand:    "tesla",
-		Color:    "black",
+	black := &v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "model 3",
+			ResourceVersion: strconv.Itoa(revision),
+			Labels: map[string]string{
+				"Brand": "tesla",
+				"Color": "black",
+			},
+		},
 	}
 	err = l.Add(black)
 	if err != nil {
@@ -181,8 +173,8 @@ func TestListOptionIndexer(t *testing.T) {
 		t.Error(err)
 	}
 	assert.Len(r, 2)
-	assert.Equal(r[0].(Car).Color, "red")
-	assert.Equal(r[1].(Car).Color, "blue")
+	assert.Equal(r[0].(*v1.Pod).Labels["Color"], "red")
+	assert.Equal(r[1].(*v1.Pod).Labels["Color"], "blue")
 
 	// test pagination
 	lo = ListOptions{
@@ -196,15 +188,15 @@ func TestListOptionIndexer(t *testing.T) {
 		t.Error(err)
 	}
 	assert.Len(r, 2)
-	assert.Equal(r[0].(Car).Color, "black")
-	assert.Equal(r[1].(Car).Color, "blue")
+	assert.Equal(r[0].(*v1.Pod).Labels["Color"], "black")
+	assert.Equal(r[1].(*v1.Pod).Labels["Color"], "blue")
 	lo.Pagination.page = 2
 	r, err = l.ListByOptions(lo)
 	if err != nil {
 		t.Error(err)
 	}
 	assert.Len(r, 1)
-	assert.Equal(r[0].(Car).Color, "red")
+	assert.Equal(r[0].(*v1.Pod).Labels["Color"], "red")
 
 	err = l.Close()
 	if err != nil {

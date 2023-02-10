@@ -13,7 +13,6 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/homedir"
 	"path/filepath"
-	"strconv"
 	"time"
 )
 
@@ -44,16 +43,10 @@ func main() {
 	}
 	lw := cache.NewListWatchFromClient(c, "pods", "cattle-system", fields.Everything())
 
-	keyfunc := func(o any) (string, error) {
-		return o.(*v1.Pod).Name, nil
-	}
-	versionfunc := func(o any) (int, error) {
-		return strconv.Atoi(o.(*v1.Pod).ResourceVersion)
-	}
 	fieldFuncs := map[string]sqlcache.FieldFunc{}
-	loi, err := sqlcache.NewListOptionIndexer(v1.Pod{}, keyfunc, versionfunc, "pods.sqlite", fieldFuncs)
+	loi, err := sqlcache.NewListOptionIndexer(&v1.Pod{}, "pods.sqlite", fieldFuncs)
 
-	r := cache.NewReflector(lw, v1.Pod{}, loi, time.Hour)
+	r := cache.NewReflector(lw, &v1.Pod{}, loi, time.Hour)
 
 	var wg wait.Group
 	stopCh := make(chan struct{})
