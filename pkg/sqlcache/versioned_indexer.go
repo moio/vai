@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	_ "github.com/mattn/go-sqlite3"
 	"k8s.io/client-go/tools/cache"
-	"reflect"
 )
 
 // VersionedIndexer extends Indexer by storing a range of revisions in addition to the latest one
@@ -19,8 +18,8 @@ type VersionedIndexer struct {
 
 type VersionFunc func(obj any) (int, error)
 
-func NewVersionedIndexer(typ reflect.Type, keyFunc cache.KeyFunc, versionFunc VersionFunc, path string, indexers cache.Indexers) (*VersionedIndexer, error) {
-	i, err := NewIndexer(typ, keyFunc, path, indexers)
+func NewVersionedIndexer(example any, keyFunc cache.KeyFunc, versionFunc VersionFunc, path string, indexers cache.Indexers) (*VersionedIndexer, error) {
+	i, err := NewIndexer(example, keyFunc, path, indexers)
 
 	err = i.InitExec(`CREATE TABLE object_history (
 			key VARCHAR NOT NULL,

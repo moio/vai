@@ -27,8 +27,8 @@ type Store struct {
 	afterDelete []func(key string, tx *sql.Tx) error
 }
 
-// NewStore creates a SQLite-backed cache.Store for the type typ
-func NewStore(typ reflect.Type, keyFunc cache.KeyFunc, path string) (*Store, error) {
+// NewStore creates a SQLite-backed cache.Store for objects of the given example type
+func NewStore(example any, keyFunc cache.KeyFunc, path string) (*Store, error) {
 	err := os.RemoveAll(path)
 	if err != nil {
 		return nil, err
@@ -39,7 +39,7 @@ func NewStore(typ reflect.Type, keyFunc cache.KeyFunc, path string) (*Store, err
 	}
 
 	s := &Store{
-		typ:         typ,
+		typ:         reflect.TypeOf(example),
 		keyFunc:     keyFunc,
 		db:          db,
 		afterUpsert: []func(key string, obj any, tx *sql.Tx) error{},

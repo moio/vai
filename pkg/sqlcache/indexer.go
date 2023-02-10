@@ -6,7 +6,6 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/pkg/errors"
 	"k8s.io/client-go/tools/cache"
-	"reflect"
 	"strings"
 )
 
@@ -22,8 +21,8 @@ type Indexer struct {
 	listIndexValuesStmt *sql.Stmt
 }
 
-// NewIndexer returns a cache.Indexer backed by SQLite for the type typ
-func NewIndexer(typ reflect.Type, keyFunc cache.KeyFunc, path string, indexers cache.Indexers) (*Indexer, error) {
+// NewIndexer returns a cache.Indexer backed by SQLite for objects of the given example type
+func NewIndexer(example any, keyFunc cache.KeyFunc, path string, indexers cache.Indexers) (*Indexer, error) {
 	// sanity checks first
 	for key := range indexers {
 		if strings.Contains(key, `"`) {
@@ -31,7 +30,7 @@ func NewIndexer(typ reflect.Type, keyFunc cache.KeyFunc, path string, indexers c
 		}
 	}
 
-	s, err := NewStore(typ, keyFunc, path)
+	s, err := NewStore(example, keyFunc, path)
 	if err != nil {
 		return nil, err
 	}

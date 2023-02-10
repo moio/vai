@@ -3,7 +3,6 @@ package sqlcache
 import (
 	"github.com/pkg/errors"
 	"k8s.io/client-go/tools/cache"
-	"reflect"
 )
 
 // threadSafeStore is a SQLite-backed cache.ThreadSafeStore which builds upon Index
@@ -11,9 +10,9 @@ type threadSafeStore struct {
 	*Indexer
 }
 
-// NewThreadSafeStore returns a cache.ThreadSafeStore backed by SQLite for the type typ
-func NewThreadSafeStore(typ reflect.Type, path string, indexers cache.Indexers) (cache.ThreadSafeStore, error) {
-	i, err := NewIndexer(typ, dummyKeyFunc, path, indexers)
+// NewThreadSafeStore returns a cache.ThreadSafeStore backed by SQLite for the example type
+func NewThreadSafeStore(example any, path string, indexers cache.Indexers) (cache.ThreadSafeStore, error) {
+	i, err := NewIndexer(example, dummyKeyFunc, path, indexers)
 	if err != nil {
 		return nil, err
 	}

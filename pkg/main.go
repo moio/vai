@@ -13,7 +13,6 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/homedir"
 	"path/filepath"
-	"reflect"
 	"strconv"
 	"time"
 )
@@ -52,7 +51,7 @@ func main() {
 		return strconv.Atoi(o.(*v1.Pod).ResourceVersion)
 	}
 	fieldFuncs := map[string]sqlcache.FieldFunc{}
-	loi, err := sqlcache.NewListOptionIndexer(reflect.TypeOf(v1.Pod{}), keyfunc, versionfunc, "pods.sqlite", fieldFuncs)
+	loi, err := sqlcache.NewListOptionIndexer(v1.Pod{}, keyfunc, versionfunc, "pods.sqlite", fieldFuncs)
 
 	r := cache.NewReflector(lw, v1.Pod{}, loi, time.Hour)
 

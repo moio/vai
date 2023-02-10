@@ -8,7 +8,6 @@ package sqlcache
 
 import (
 	"github.com/stretchr/testify/assert"
-	"reflect"
 	"testing"
 )
 
@@ -49,7 +48,7 @@ var fieldFunc = map[string]FieldFunc{
 func TestListOptionIndexer(t *testing.T) {
 	assert := assert.New(t)
 
-	l, err := NewListOptionIndexer(reflect.TypeOf(Car{}), keyfunc, versionfunc, TEST_DB_LOCATION, fieldFunc)
+	l, err := NewListOptionIndexer(Car{}, keyfunc, versionfunc, TEST_DB_LOCATION, fieldFunc)
 	if err != nil {
 		t.Error(err)
 	}

@@ -9,7 +9,6 @@ package sqlcache
 import (
 	"fmt"
 	"k8s.io/client-go/tools/cache"
-	"reflect"
 	"sort"
 	"strings"
 	"testing"
@@ -30,7 +29,7 @@ func TestThreadSafeStoreDeleteRemovesEmptySetsFromIndex(t *testing.T) {
 		},
 	}
 
-	store, err := NewThreadSafeStore(reflect.TypeOf(""), TEST_DB_LOCATION, indexers)
+	store, err := NewThreadSafeStore("", TEST_DB_LOCATION, indexers)
 	if err != nil {
 		t.Errorf("Unexpected error creating ThreadSafeStore: %v", err)
 	}
@@ -70,7 +69,7 @@ func TestThreadSafeStoreAddKeepsNonEmptySetPostDeleteFromIndex(t *testing.T) {
 		},
 	}
 
-	store, err := NewThreadSafeStore(reflect.TypeOf(""), TEST_DB_LOCATION, indexers)
+	store, err := NewThreadSafeStore("", TEST_DB_LOCATION, indexers)
 	if err != nil {
 		t.Errorf("Unexpected error creating ThreadSafeStore: %v", err)
 	}
@@ -113,7 +112,7 @@ func TestThreadSafeStoreIndexingFunctionsWithMultipleValues(t *testing.T) {
 		},
 	}
 
-	store, err := NewThreadSafeStore(reflect.TypeOf(""), TEST_DB_LOCATION, indexers)
+	store, err := NewThreadSafeStore("", TEST_DB_LOCATION, indexers)
 	if err != nil {
 		t.Errorf("Unexpected error creating ThreadSafeStore: %v", err)
 	}
@@ -195,7 +194,7 @@ func BenchmarkIndexer(b *testing.B) {
 		},
 	}
 
-	store, err := NewThreadSafeStore(reflect.TypeOf(""), TEST_DB_LOCATION, indexers)
+	store, err := NewThreadSafeStore("", TEST_DB_LOCATION, indexers)
 	if err != nil {
 		b.Errorf("Unexpected error creating ThreadSafeStore: %v", err)
 	}

@@ -6,7 +6,6 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/pkg/errors"
 	"k8s.io/client-go/tools/cache"
-	"reflect"
 	"strconv"
 	"strings"
 )
@@ -67,8 +66,8 @@ type ListOptionIndexer struct {
 // FieldFunc is a function from an object to a filterable/sortable property. Result can be string, int or bool
 type FieldFunc func(obj any) any
 
-func NewListOptionIndexer(typ reflect.Type, keyFunc cache.KeyFunc, versionFunc VersionFunc, path string, fieldFuncs map[string]FieldFunc) (*ListOptionIndexer, error) {
-	v, err := NewVersionedIndexer(typ, keyFunc, versionFunc, path, cache.Indexers{})
+func NewListOptionIndexer(example any, keyFunc cache.KeyFunc, versionFunc VersionFunc, path string, fieldFuncs map[string]FieldFunc) (*ListOptionIndexer, error) {
+	v, err := NewVersionedIndexer(example, keyFunc, versionFunc, path, cache.Indexers{})
 	if err != nil {
 		return nil, err
 	}

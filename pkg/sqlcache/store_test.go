@@ -7,7 +7,6 @@ Adapted from client-go, Copyright 2014 The Kubernetes Authors.
 package sqlcache
 
 import (
-	"reflect"
 	"testing"
 
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -134,7 +133,7 @@ type testStoreObject struct {
 }
 
 func TestStore(t *testing.T) {
-	store, err := NewStore(reflect.TypeOf(testStoreObject{}), testStoreKeyFunc, TEST_DB_LOCATION)
+	store, err := NewStore(testStoreObject{}, testStoreKeyFunc, TEST_DB_LOCATION)
 	if err != nil {
 		t.Error(err)
 	}
