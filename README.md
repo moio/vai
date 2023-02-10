@@ -17,9 +17,9 @@ Additionally, SQLite make it easier to develop custom sorting, filtering, pagina
 * `sqlcache.NewThreadSafeStore` returns a SQLite-backed cache.NewThreadSafeStore instance that passes client-go's unit tests
 * `sqlcache.NewVersionedIndexer` returns a SQLite-backed cache.Indexer instance that keeps track of past versions of resources
 * `sqlcache.NewListOptionIndexer` returns a SQLite-backed cache.Indexer instance that can satisfy a Rancher [steve](https://github.com/rancher/steve)'s [ListOptions](https://github.com/rancher/steve/blob/53fbb87f5968222d47e55759d87e1f1b93a4533b/pkg/stores/partition/listprocessor/processor.go#L27) query object
+* it is possible to set up a `Reflector` to populate a `ListOptionIndexer` from a Kubernetes API, see `main.go` for an example
 
 Next steps:
-* Build a `Reflector` backed by a `ListOptionIndexer`
 * Build a `Informer` backed by a `ListOptionIndexer`
 
 This project has originated in [SUSE HackWeek](https://hackweek.opensuse.org/22/projects/vai-a-kubernetes-api-caching-layer).
