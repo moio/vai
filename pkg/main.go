@@ -17,22 +17,35 @@ import (
 )
 
 func main() {
-	var kubeconfig *string
-	if home := homedir.HomeDir(); home != "" {
-		kubeconfig = flag.String("kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
-	} else {
-		kubeconfig = flag.String("kubeconfig", "", "absolute path to the kubeconfig file")
-	}
-	flag.Parse()
-
-	// use the current context in kubeconfig
-	config, err := clientcmd.BuildConfigFromFlags("", *kubeconfig)
-	if err != nil {
-		panic(err.Error())
-	}
+	config := readKubeconfig()
+	client := getRESTClient(config)
 
 	// create the ListWatcher
-	gv, err := schema.ParseGroupVersion("api/v1")
+	listWatcher := cache.NewListWatchFromClient(client, "pods", "cattle-system", fields.Everything())
+
+	// create the Indexer
+	fieldFuncs := map[string]sqlcache.FieldFunc{
+		"metadata.creationTimestamp": func(obj any) any {
+			return obj.(*v1.Pod).CreationTimestamp.String()
+		},
+	}
+	indexer, err := sqlcache.NewListOptionIndexer(&v1.Pod{}, "pods.sqlite", fieldFuncs)
+	if err != nil {
+		panic(err)
+	}
+
+	// connect the ListWatcher to feed the Indexer
+	r := cache.NewReflector(listWatcher, &v1.Pod{}, indexer, time.Hour)
+
+	// go!
+	var wg wait.Group
+	stopCh := make(chan struct{})
+	wg.StartWithChannel(stopCh, r.Run)
+	wg.Wait()
+}
+
+func getRESTClient(config *rest.Config) *rest.RESTClient {
+	gv, _ := schema.ParseGroupVersion("api/v1")
 	config.ContentConfig = rest.ContentConfig{
 		GroupVersion:         &gv,
 		NegotiatedSerializer: scheme.Codecs.WithoutConversion(),
@@ -41,15 +54,21 @@ func main() {
 	if err != nil {
 		panic(err.Error())
 	}
-	lw := cache.NewListWatchFromClient(c, "pods", "cattle-system", fields.Everything())
+	return c
+}
 
-	fieldFuncs := map[string]sqlcache.FieldFunc{}
-	loi, err := sqlcache.NewListOptionIndexer(&v1.Pod{}, "pods.sqlite", fieldFuncs)
+func readKubeconfig() *rest.Config {
+	var kubeconfig *string
+	if home := homedir.HomeDir(); home != "" {
+		kubeconfig = flag.String("kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
+	} else {
+		kubeconfig = flag.String("kubeconfig", "", "absolute path to the kubeconfig file")
+	}
+	flag.Parse()
 
-	r := cache.NewReflector(lw, &v1.Pod{}, loi, time.Hour)
-
-	var wg wait.Group
-	stopCh := make(chan struct{})
-	wg.StartWithChannel(stopCh, r.Run)
-	wg.Wait()
+	config, err := clientcmd.BuildConfigFromFlags("", *kubeconfig)
+	if err != nil {
+		panic(err.Error())
+	}
+	return config
 }
