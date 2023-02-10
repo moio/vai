@@ -76,6 +76,13 @@ func NewListOptionIndexer(example meta.Object, path string, fieldFuncs map[strin
 		}
 		return o.GetName(), nil
 	}
+
+	return NewCustomListOptionIndexer(example, keyFunc, path, fieldFuncs, cache.Indexers{})
+}
+
+// NewCustomListOptionIndexer returns a cache.Indexer on a Kubernetes resource that is also able to satisfy ListOption queries
+// with custom keyFunc and Indexers
+func NewCustomListOptionIndexer(example meta.Object, keyFunc cache.KeyFunc, path string, fieldFuncs map[string]FieldFunc, indexers cache.Indexers) (*ListOptionIndexer, error) {
 	versionFunc := func(a any) (int, error) {
 		o, ok := a.(meta.Object)
 		if !ok {
@@ -87,7 +94,7 @@ func NewListOptionIndexer(example meta.Object, path string, fieldFuncs map[strin
 		}
 		return i, nil
 	}
-	v, err := NewVersionedIndexer(example, keyFunc, versionFunc, path, cache.Indexers{})
+	v, err := NewVersionedIndexer(example, keyFunc, versionFunc, path, indexers)
 	if err != nil {
 		return nil, err
 	}
