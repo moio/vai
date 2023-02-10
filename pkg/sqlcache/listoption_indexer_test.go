@@ -10,8 +10,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"reflect"
 	"testing"
-
-	"k8s.io/client-go/tools/cache"
 )
 
 type Car struct {
@@ -51,7 +49,7 @@ var fieldFunc = map[string]FieldFunc{
 func TestListOptionIndexer(t *testing.T) {
 	assert := assert.New(t)
 
-	l, err := NewListOptionIndexer(reflect.TypeOf(Car{}), keyfunc, versionfunc, TEST_DB_LOCATION, cache.Indexers{}, fieldFunc)
+	l, err := NewListOptionIndexer(reflect.TypeOf(Car{}), keyfunc, versionfunc, TEST_DB_LOCATION, fieldFunc)
 	if err != nil {
 		t.Error(err)
 	}

@@ -52,7 +52,7 @@ func main() {
 		return strconv.Atoi(o.(*v1.Pod).ResourceVersion)
 	}
 	fieldFuncs := map[string]sqlcache.FieldFunc{}
-	loi, err := sqlcache.NewListOptionIndexer(reflect.TypeOf(v1.Pod{}), keyfunc, versionfunc, "pods.sqlite", cache.Indexers{}, fieldFuncs)
+	loi, err := sqlcache.NewListOptionIndexer(reflect.TypeOf(v1.Pod{}), keyfunc, versionfunc, "pods.sqlite", fieldFuncs)
 
 	r := cache.NewReflector(lw, v1.Pod{}, loi, time.Hour)
 

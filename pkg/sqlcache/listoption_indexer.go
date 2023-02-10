@@ -67,8 +67,8 @@ type ListOptionIndexer struct {
 // FieldFunc is a function from an object to a filterable/sortable property. Result can be string, int or bool
 type FieldFunc func(obj any) any
 
-func NewListOptionIndexer(typ reflect.Type, keyFunc cache.KeyFunc, versionFunc VersionFunc, path string, indexers cache.Indexers, fieldFuncs map[string]FieldFunc) (*ListOptionIndexer, error) {
-	v, err := NewVersionedIndexer(typ, keyFunc, versionFunc, path, indexers)
+func NewListOptionIndexer(typ reflect.Type, keyFunc cache.KeyFunc, versionFunc VersionFunc, path string, fieldFuncs map[string]FieldFunc) (*ListOptionIndexer, error) {
+	v, err := NewVersionedIndexer(typ, keyFunc, versionFunc, path, cache.Indexers{})
 	if err != nil {
 		return nil, err
 	}
