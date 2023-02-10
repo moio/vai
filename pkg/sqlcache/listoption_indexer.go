@@ -185,14 +185,14 @@ func (l *ListOptionIndexer) ListByOptions(lo ListOptions) ([]any, error) {
 		whereClauses = append(whereClauses, "o.version = (SELECT MAX(o2.version) FROM object_history o2 WHERE o2.key = o.key)")
 		whereClauses = append(whereClauses, "o.deleted_version IS NULL")
 	} else {
-		revision, err := strconv.Atoi(lo.Revision)
+		version, err := strconv.Atoi(lo.Revision)
 		if err != nil {
 			return nil, errors.Wrapf(err, "Could not parse Revision %s", lo.Revision)
 		}
 		whereClauses = append(whereClauses, "o.version = (SELECT MAX(o2.version) FROM object_history o2 WHERE o2.key = o.key AND o2.version <= ?)")
-		params = append(params, revision)
+		params = append(params, version)
 		whereClauses = append(whereClauses, "(o.deleted_version IS NULL OR o.deleted_version > ?)")
-		params = append(params, revision)
+		params = append(params, version)
 	}
 
 	// compute ORDER BY clauses (from lo.Sort)

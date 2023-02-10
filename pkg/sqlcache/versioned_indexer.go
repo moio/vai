@@ -6,7 +6,7 @@ import (
 	"k8s.io/client-go/tools/cache"
 )
 
-// VersionedIndexer extends Indexer by storing a range of revisions in addition to the latest one
+// VersionedIndexer extends Indexer by storing a range of versions in addition to the latest one
 type VersionedIndexer struct {
 	*Indexer
 	versionFunc VersionFunc
@@ -18,6 +18,7 @@ type VersionedIndexer struct {
 
 type VersionFunc func(obj any) (int, error)
 
+// NewVersionedIndexer returns an Indexer that also stores a range of versions in addition to the latest one
 func NewVersionedIndexer(example any, keyFunc cache.KeyFunc, versionFunc VersionFunc, path string, indexers cache.Indexers) (*VersionedIndexer, error) {
 	i, err := NewIndexer(example, keyFunc, path, indexers)
 
