@@ -67,6 +67,7 @@ type ListOptionIndexer struct {
 // FieldFunc is a function from an object to a filterable/sortable property. Result can be string, int or bool
 type FieldFunc func(obj any) any
 
+// NewListOptionIndexer returns a cache.Indexer on a Kubernetes resource that is also able to satisfy ListOption queries
 func NewListOptionIndexer(example meta.Object, path string, fieldFuncs map[string]FieldFunc) (*ListOptionIndexer, error) {
 	keyFunc := func(a any) (string, error) {
 		o, ok := a.(meta.Object)
